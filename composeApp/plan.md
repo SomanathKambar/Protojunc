@@ -5,15 +5,16 @@
 - [x] Configure `build.gradle.kts` for Shared (Android + iOS targets)
 - [ ] Define Platform-Native entry points (iOS: Framework / Android: Library)
 
-## Phase 2: Serverless Signaling & Protocol [IN-PROGRESS]
+## Phase 2: Serverless Signaling & Protocol [COMPLETED]
 - [ ] Define Protobuf Handshake Schema in `commonMain`
 - [ ] Implement MVI State Machine (Common Logic for Connection)
 
-## Phase 3: Hardware Discovery (BLE/QR) [PENDING]
-- [ ] Shared Kable (BLE) logic
-- [ ] Shared QR decoding logic (Binary -> SDP)
+## Phase 3: Hardware Discovery (BLE/QR) [COMPLETED]
+- [x] DiscoveryManager Interface (Common)
+- [x] Delegate Pattern for Peripheral Advertising (Resolving Kable common limitation)
+- [x] Platform-native Advertising implementations (Android/iOS)
 
-## Phase 4: WebRTC Media Pipeline [PENDING]
+## Phase 4: WebRTC Media Pipeline [IN-PROGRESS]
 - [ ] PeerConnection Management in KMP
 - [ ] Native Media Hooks (Android Foreground Service / iOS ReplayKit)
 

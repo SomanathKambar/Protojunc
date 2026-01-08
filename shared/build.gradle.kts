@@ -30,6 +30,7 @@ kotlin {
             // put your Multiplatform dependencies here
             implementation(libs.kotlinx.serialization.protobuf)
             implementation(libs.kotlinx.coroutines.core)
+            implementation(libs.kable)
 
         }
         commonTest.dependencies {
