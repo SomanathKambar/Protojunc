@@ -1,0 +1,6 @@
+# Use Bundler to manage a local CocoaPods install so Xcode doesn't rely on system PATH
+source "https://rubygems.org"
+
+ruby ">= 2.7"
+
+gem "cocoapods", "~> 1.14"

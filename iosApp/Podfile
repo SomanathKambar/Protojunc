@@ -1,0 +1,10 @@
+platform :ios, '15.0'
+
+target 'iosApp' do
+  use_frameworks!
+  # This links your shared KMP logic
+  pod 'shared', :path => '../shared'
+  # This provides the actual WebRTC binary KMP needs
+  pod 'GoogleWebRTC', '1.1.31999'
+end
+

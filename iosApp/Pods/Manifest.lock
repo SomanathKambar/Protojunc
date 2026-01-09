@@ -1,0 +1,24 @@
+PODS:
+  - GoogleWebRTC (1.1.31999)
+  - shared (1.0):
+    - GoogleWebRTC (= 1.1.31999)
+
+DEPENDENCIES:
+  - GoogleWebRTC (= 1.1.31999)
+  - shared (from `../shared`)
+
+SPEC REPOS:
+  trunk:
+    - GoogleWebRTC
+
+EXTERNAL SOURCES:
+  shared:
+    :path: "../shared"
+
+SPEC CHECKSUMS:
+  GoogleWebRTC: b39a78c4f5cc6b0323415b9233db03a2faa7b0f0
+  shared: 9362af1634036921ea5b69aa70ae7a7052abb21e
+
+PODFILE CHECKSUM: 59bf5c3e29e3afb07ee7ff5d7c95ceff06dffa13
+
+COCOAPODS: 1.16.2
