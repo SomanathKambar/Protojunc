@@ -95,6 +95,10 @@ class WebRtcSessionManager {
         val pc = peerConnection ?: return null
         _progressMessage.value = "Generating Offer..."
         val offer = pc.createOffer(OfferAnswerOptions())
+        
+        // Ensure the connection wasn't closed while creating the offer
+        if (peerConnection != pc) return null
+        
         pc.setLocalDescription(offer)
         
         // Instant return if possible, or wait very briefly
@@ -118,6 +122,10 @@ class WebRtcSessionManager {
         val pc = peerConnection ?: return null
         _progressMessage.value = "Generating Answer..."
         val answer = pc.createAnswer(OfferAnswerOptions())
+        
+        // Ensure the connection wasn't closed while creating the answer
+        if (peerConnection != pc) return null
+        
         pc.setLocalDescription(answer)
         
         delay(300)

@@ -32,6 +32,7 @@ class ConnectionViewModel : ViewModel() {
     }
 
     fun handleBlePeerSelected(peer: PeerDiscovered, onConnected: () -> Unit) {
+        if (_isInitializing.value || _isProcessing.value) return
         viewModelScope.launch {
             try {
                 _isInitializing.value = true
@@ -64,6 +65,7 @@ class ConnectionViewModel : ViewModel() {
     }
 
     fun prepareInvite(onReady: () -> Unit) {
+        if (_isInitializing.value || _isProcessing.value) return
         viewModelScope.launch {
             try {
                 _isInitializing.value = true
@@ -82,6 +84,7 @@ class ConnectionViewModel : ViewModel() {
     }
 
     fun handleOfferScanned(offerSdp: String) {
+        if (_isInitializing.value || _isProcessing.value) return
         viewModelScope.launch {
             try {
                 _isInitializing.value = true
