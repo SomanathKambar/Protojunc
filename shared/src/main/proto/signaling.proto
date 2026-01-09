@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package com.tej.directo.p2p.signaling.protocol;
+
+option java_package = "com.tej.directo.p2p.signaling.protocol";
+option java_multiple_files = true;
+
+message HandshakeMessage {
+  enum Type {
+    UNKNOWN = 0;
+    OFFER = 1;
+    ANSWER = 2;
+    ICE_CANDIDATE = 3;
+    BYE = 4;
+  }
+  
+  Type type = 1;
+  string sdp = 2;
+  string candidate = 3;
+  string sdp_mid = 4;
+  int32 sdp_m_line_index = 5;
+  string device_id = 6;
+}
