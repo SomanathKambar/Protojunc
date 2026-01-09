@@ -14,12 +14,14 @@ import androidx.compose.ui.unit.dp
 import com.tej.directo.discovery.AndroidPeripheralAdvertiser
 import com.tej.directo.discovery.KableDiscoveryManager
 import com.tej.directo.discovery.PeerDiscovered
+import com.tej.directo.discovery.DiscoveryManager
 import android.content.Context
 import android.bluetooth.BluetoothManager
 import kotlinx.coroutines.launch
 
 @Composable
 fun InviteBleScreen(
+    onAnswerReceived: (String) -> Unit,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -33,8 +35,17 @@ fun InviteBleScreen(
     var error by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
+        val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+        if (!manager.adapter.isEnabled) {
+            error = "Bluetooth is disabled. Please enable it."
+            return@LaunchedEffect
+        }
         try {
             discoveryManager.startAdvertising("SDP_OFFER_PENDING")
+            
+            discoveryManager.observeMessages().collect { answer ->
+                onAnswerReceived(answer)
+            }
         } catch (e: Exception) {
             error = e.message ?: "Bluetooth error"
         }
@@ -61,26 +72,39 @@ fun InviteBleScreen(
 
 @Composable
 fun JoinBleScreen(
+    discoveryManager: DiscoveryManager,
     onPeerSelected: (PeerDiscovered) -> Unit,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val advertiser = remember {
-        val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-        AndroidPeripheralAdvertiser(context, manager.adapter)
-    }
-    val discoveryManager = remember { KableDiscoveryManager(advertiser) }
     var peers by remember { mutableStateOf(setOf<PeerDiscovered>()) }
     var error by remember { mutableStateOf<String?>(null) }
+    var isConnecting by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
+        val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+        if (!manager.adapter.isEnabled) {
+            error = "Bluetooth is disabled. Please enable it."
+            return@LaunchedEffect
+        }
         try {
             discoveryManager.observeNearbyPeers().collect { peer ->
                 peers = peers + peer
             }
         } catch (e: Exception) {
             error = e.message ?: "Discovery failed. Check if Bluetooth is On."
+        }
+    }
+
+    LaunchedEffect(peers) {
+        // Auto-select if only one Directo partner is found after 2 seconds
+        if (peers.size == 1 && !isConnecting) {
+            kotlinx.coroutines.delay(2000)
+            if (peers.size == 1 && !isConnecting) {
+                isConnecting = true
+                onPeerSelected(peers.first())
+            }
         }
     }
 

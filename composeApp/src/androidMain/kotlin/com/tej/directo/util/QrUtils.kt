@@ -9,10 +9,16 @@ import com.google.zxing.common.HybridBinarizer
 import com.google.zxing.qrcode.QRCodeWriter
 import java.util.EnumMap
 
+import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
+
 object QrUtils {
     fun generateQrCode(text: String, size: Int = 512): Bitmap {
+        val hints = mutableMapOf<EncodeHintType, Any>()
+        hints[EncodeHintType.ERROR_CORRECTION] = ErrorCorrectionLevel.L
+        hints[EncodeHintType.MARGIN] = 1
+        
         val writer = QRCodeWriter()
-        val bitMatrix = writer.encode(text, BarcodeFormat.QR_CODE, size, size)
+        val bitMatrix = writer.encode(text, BarcodeFormat.QR_CODE, size, size, hints)
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.RGB_565)
         for (x in 0 until size) {
             for (y in 0 until size) {

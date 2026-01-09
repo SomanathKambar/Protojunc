@@ -10,7 +10,8 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun HomeScreen(
     onNavigateToInvite: () -> Unit,
-    onNavigateToJoin: () -> Unit
+    onNavigateToJoin: () -> Unit,
+    processing: Boolean = false
 ) {
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
@@ -24,7 +25,8 @@ fun HomeScreen(
         
         Card(
             modifier = Modifier.fillMaxWidth().height(120.dp),
-            onClick = onNavigateToInvite
+            onClick = { if (!processing) onNavigateToInvite() },
+            enabled = !processing
         ) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -38,7 +40,8 @@ fun HomeScreen(
         
         Card(
             modifier = Modifier.fillMaxWidth().height(120.dp),
-            onClick = onNavigateToJoin,
+            onClick = { if (!processing) onNavigateToJoin() },
+            enabled = !processing,
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
         ) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

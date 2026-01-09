@@ -9,6 +9,15 @@ interface DiscoveryManager {
     // BLE: Scan for other peers broadcasting their SDP
     fun observeNearbyPeers(): Flow<PeerDiscovered>
 
+    // BLE: Connect to a discovered peer and read their SDP
+    suspend fun connectToPeer(peer: PeerDiscovered): String
+
+    // BLE: Write data (e.g., Answer SDP) to a peer
+    suspend fun writeToPeer(peer: PeerDiscovered, data: String)
+
+    // BLE: Observe incoming messages (e.g., Answer SDP received by Host)
+    fun observeMessages(): Flow<String>
+
     // QR: Generate a QR code from our SDP payload (returns the data for the UI to render)
     fun generateQrData(payload: String): String
 
@@ -16,6 +25,7 @@ interface DiscoveryManager {
 }
 
 data class PeerDiscovered(
+    val id: String,
     val name: String,
     val remoteSdpBase64: String,
     val rssi: Int // Signal strength

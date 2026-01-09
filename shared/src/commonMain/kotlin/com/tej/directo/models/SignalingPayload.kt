@@ -5,15 +5,15 @@ import kotlinx.serialization.protobuf.ProtoNumber
 
 @Serializable
 data class SignalingPayload(
-    @ProtoNumber(1) val sdp: String,
-    @ProtoNumber(2) val type: String, // "OFFER" or "ANSWER"
-    @ProtoNumber(3) val iceCandidates: List<IceCandidateModel>,
-    @ProtoNumber(4) val timestamp: Long
+    val sdp: String,
+    val type: String, // "OFFER" or "ANSWER"
+    val iceCandidates: List<IceCandidateModel>,
+    val timestamp: Long
 )
 
 @Serializable
 data class IceCandidateModel(
-    @ProtoNumber(1) val sdp: String,
-    @ProtoNumber(2) val sdpMid: String?,
-    @ProtoNumber(3) val sdpMLineIndex: Int
+    val sdp: String,
+    val sdpMid: String?,
+    val sdpMLineIndex: Int
 )

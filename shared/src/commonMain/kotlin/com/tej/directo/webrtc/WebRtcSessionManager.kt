@@ -49,14 +49,25 @@ class WebRtcSessionManager {
             val pc = PeerConnection(config)
             peerConnection = pc
 
+            // Initialize Camera & Mic
+            _progressMessage.value = "Starting Media..."
+            val stream = MediaDevices.getUserMedia(audio = true, video = true)
+            stream.audioTracks.forEach { track -> pc.addTrack(track, stream) }
+            stream.videoTracks.forEach { track ->
+                pc.addTrack(track, stream)
+                localVideoTrack.value = track
+            }
+
             scope.launch {
                 pc.onIceCandidate.collect { candidate ->
                     _iceCandidates.value = _iceCandidates.value + candidate
+                    Logger.d { "New ICE Candidate received" }
                 }
             }
 
             scope.launch {
                 pc.onConnectionStateChange.collect { state ->
+                    Logger.d { "Connection State Change: $state" }
                     _connectionState.value = when(state) {
                         PeerConnectionState.Connecting -> {
                             _progressMessage.value = "Connecting..."
@@ -67,7 +78,10 @@ class WebRtcSessionManager {
                             WebRtcState.Connected
                         }
                         PeerConnectionState.Failed -> {
-                            _errorMessage.value = "Connection Lost"
+                            _errorMessage.value = "Connection Failed"
+                            WebRtcState.Failed
+                        }
+                        PeerConnectionState.Disconnected -> {
                             WebRtcState.Failed
                         }
                         else -> _connectionState.value
@@ -77,8 +91,10 @@ class WebRtcSessionManager {
 
             scope.launch {
                 pc.onTrack.collect { event ->
-                    if (event.track is VideoTrack) {
-                        remoteVideoTrack.value = event.track as VideoTrack
+                    val track = event.track
+                    Logger.d { "Received Remote Track: ${track?.kind}" }
+                    if (track is VideoTrack) {
+                        remoteVideoTrack.value = track
                     }
                 }
             }
@@ -86,27 +102,35 @@ class WebRtcSessionManager {
             _progressMessage.value = "Ready"
             _connectionState.value = WebRtcState.Ready
         } catch (e: Exception) {
+            Logger.e(e) { "Engine Error" }
             _errorMessage.value = "Engine Error: ${e.message}"
             _connectionState.value = WebRtcState.Failed
         }
+    }
+
+    private suspend fun PeerConnection.waitForIceGathering() {
+        if (iceGatheringState == IceGatheringState.Complete) return
+        
+        // Fallback: Wait for gathering to reach completion or timeout
+        // Since the exact Flow property name is elusive in this environment, 
+        // a polling loop is a safe and robust alternative for P2P signaling.
+        var attempts = 0
+        while (iceGatheringState != IceGatheringState.Complete && attempts < 50) {
+            delay(100)
+            attempts++
+        }
+        Logger.d { "ICE Gathering finished with state: $iceGatheringState after ${attempts * 100}ms" }
     }
 
     suspend fun createOffer(): String? {
         val pc = peerConnection ?: return null
         _progressMessage.value = "Generating Offer..."
         val offer = pc.createOffer(OfferAnswerOptions())
-        
-        // Ensure the connection wasn't closed while creating the offer
-        if (peerConnection != pc) return null
-        
         pc.setLocalDescription(offer)
         
-        // Instant return if possible, or wait very briefly
-        _progressMessage.value = "Finalizing..."
-        // If the library supports it, waiting for gathering to start is enough
-        delay(300) 
+        _progressMessage.value = "Gathering Candidates..."
+        pc.waitForIceGathering()
 
-        // Ensure the connection wasn't closed during the delay
         if (peerConnection != pc) return null
         
         _progressMessage.value = "Ready"
@@ -114,23 +138,35 @@ class WebRtcSessionManager {
     }
 
     suspend fun handleRemoteDescription(sdp: String, type: SessionDescriptionType) {
-        _progressMessage.value = "Processing..."
-        peerConnection?.setRemoteDescription(SessionDescription(type, sdp))
+        _progressMessage.value = "Validating SDP..."
+        
+        // RCA: WebRTC native layer often returns Null if the string doesn't contain 'v=0' or 'm='
+        if (!sdp.contains("v=0") || !sdp.contains("m=")) {
+            val error = "Malformed SDP: Essential markers missing. Content: ${sdp.take(30)}..."
+            _errorMessage.value = error
+            throw IllegalArgumentException(error)
+        }
+
+        _progressMessage.value = "Applying Remote Description..."
+        try {
+            val description = SessionDescription(type, sdp)
+            peerConnection?.setRemoteDescription(description)
+        } catch (e: Exception) {
+            val error = "Native SDP Error: ${e.message}"
+            _errorMessage.value = error
+            throw e
+        }
     }
 
     suspend fun createAnswer(): String? {
         val pc = peerConnection ?: return null
         _progressMessage.value = "Generating Answer..."
         val answer = pc.createAnswer(OfferAnswerOptions())
-        
-        // Ensure the connection wasn't closed while creating the answer
-        if (peerConnection != pc) return null
-        
         pc.setLocalDescription(answer)
         
-        delay(300)
+        _progressMessage.value = "Gathering Candidates..."
+        pc.waitForIceGathering()
 
-        // Ensure the connection wasn't closed during the delay
         if (peerConnection != pc) return null
         
         _progressMessage.value = "Ready"

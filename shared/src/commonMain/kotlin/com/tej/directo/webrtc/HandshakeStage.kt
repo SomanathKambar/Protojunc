@@ -1,0 +1,15 @@
+package com.tej.directo.webrtc
+
+enum class HandshakeStage {
+    IDLE,
+    CONNECTING_TO_PEER,
+    NEGOTIATING_MTU,
+    READING_OFFER_HEADER,
+    READING_OFFER_PAYLOAD,
+    DECODING_SDP,
+    SETTING_REMOTE_DESCRIPTION,
+    GENERATING_ANSWER,
+    WRITING_ANSWER,
+    COMPLETED,
+    FAILED
+}
