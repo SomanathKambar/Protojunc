@@ -4,34 +4,56 @@ plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidLibrary)
     alias(libs.plugins.kotlinSerialization)
+    alias(libs.plugins.kotlinCocoapods)
+    alias(libs.plugins.protobuf)
+    // alias(libs.plugins.ksp)
 }
 
 kotlin {
     androidTarget {
         compilerOptions {
-            jvmTarget.set(JvmTarget.JVM_11)
+            jvmTarget.set(JvmTarget.JVM_17)
         }
     }
     
-    listOf(
-        iosArm64(),
-        iosSimulatorArm64()
-    ).forEach { iosTarget ->
-        iosTarget.binaries.framework {
-            baseName = "Shared"
+    iosArm64()
+    iosSimulatorArm64()
+    iosX64()
+
+    cocoapods {
+        version = "1.0.0"
+        summary = "WebRTC P2P Shared Logic"
+        homepage = "https://github.com/your-repo/directo"
+        ios.deploymentTarget = "15.0"
+
+        framework {
+            baseName = "shared"
             isStatic = true
         }
+
+        pod("GoogleWebRTC") {
+            version = "1.1.31999"
+            moduleName = "WebRTC"
+        }
     }
-    
-    jvm()
     
     sourceSets {
         commonMain.dependencies {
-            // put your Multiplatform dependencies here
             implementation(libs.kotlinx.serialization.protobuf)
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kable)
-
+            api(libs.webrtc)
+            implementation(libs.kermit)
+            implementation(libs.protobuf.kotlin)
+            implementation(libs.okio)
+            implementation(libs.room.runtime)
+            implementation(libs.androidx.datastore.preferences)
+            implementation(libs.androidx.sqlite)
+        }
+        androidMain.dependencies {
+            implementation(libs.webrtc.kmp.android)
+            implementation(libs.androidx.core.ktx)
+            implementation(libs.zxing.core)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
@@ -39,14 +61,40 @@ kotlin {
     }
 }
 
+dependencies {
+    // add("kspCommonMainMetadata", libs.room.compiler)
+    // add("kspAndroid", libs.room.compiler)
+    // add("kspIosX64", libs.room.compiler)
+    // add("kspIosArm64", libs.room.compiler)
+    // add("kspIosSimulatorArm64", libs.room.compiler)
+}
+
 android {
     namespace = "com.tej.directo.shared"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
     defaultConfig {
         minSdk = libs.versions.android.minSdk.get().toInt()
+    }
+}
+
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:3.25.1"
+    }
+    generateProtoTasks {
+        all().forEach { task ->
+            task.builtins {
+                create("java") {
+                    option("lite")
+                }
+                create("kotlin") {
+                    option("lite")
+                }
+            }
+        }
     }
 }

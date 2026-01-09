@@ -1,5 +1,5 @@
 [versions]
-agp = "8.11.2"
+agp = "8.13.2"
 android-compileSdk = "36"
 android-minSdk = "24"
 android-targetSdk = "36"
@@ -9,20 +9,27 @@ androidx-core = "1.17.0"
 androidx-espresso = "3.7.0"
 androidx-lifecycle = "2.9.6"
 androidx-testExt = "1.3.0"
-composeMultiplatform = "1.9.3"
+composeMultiplatform = "1.7.0"
 junit = "4.13.2"
-kotlin = "2.3.0"
+kotlin = "2.2.20"
+kotlin_cocopods = "2.2.20"
 ktor = "3.3.3"
-logback = "1.5.22"
-
-webrtc-kmp = "1.2.0"
-kable = "0.30.0"
-room = "2.7.0-alpha12" # 2026 KMP stable release
+logback = "1.5.24"
+webrtc-kmp = "0.125.11"
+kable = "0.32.0"
+room = "2.8.4"
 camerak = "1.0.0"
-okio = "3.9.1"
-kotlinx-serialization = "1.7.3"
-kotlinx-coroutines = "1.10.1"
-
+okio = "3.16.4"
+kotlinx-serialization = "1.9.0"
+kotlinx-coroutines = "1.10.2"
+protobuf = "3.25.1"
+webrtc-ios = "0.125.11"
+kermit = "2.0.0"
+zxing = "3.5.2"
+sqlite = "2.4.0"
+datastore = "1.1.0"
+camerax = "1.4.1"
+navigation = "2.8.5"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -41,17 +48,32 @@ ktor-serverNetty = { module = "io.ktor:ktor-server-netty-jvm", version.ref = "kt
 ktor-serverTestHost = { module = "io.ktor:ktor-server-test-host-jvm", version.ref = "ktor" }
 
 # WebRTC & Connectivity
-webrtc = { module = "com.shepeliev.webrtc-kmp:webrtc-kmp", version.ref = "webrtc-kmp" }
+webrtc = { module = "com.shepeliev:webrtc-kmp", version.ref = "webrtc-kmp" }
 kable = { module = "com.juul.kable:core", version.ref = "kable" }
 # Storage & Persistence
 room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
 room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
 okio = { module = "com.squareup.okio:okio", version.ref = "okio" }
+androidx-sqlite = { module = "androidx.sqlite:sqlite", version.ref = "sqlite" }
+androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
+
 # Hardware & UI
 camerak = { module = "io.github.kashif-me:camerak", version.ref = "camerak" }
+zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
+
 # Logic & Serialization
 kotlinx-serialization-protobuf = { module = "org.jetbrains.kotlinx:kotlinx-serialization-protobuf", version.ref = "kotlinx-serialization" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
+webrtc-kmp-android = { module = "com.shepeliev:webrtc-kmp-android", version.ref = "webrtc-kmp" }
+webrtc-ios = { module = "com.webrtc.framework:GoogleWebRTC", version.ref = "webrtc-ios" }
+protobuf-kotlin = { module = "com.google.protobuf:protobuf-kotlin-lite", version.ref = "protobuf" }
+kermit = { module = "co.touchlab:kermit", version.ref = "kermit" }
+
+# CameraX
+androidx-navigation-compose = { module = "androidx.navigation:navigation-compose", version.ref = "navigation" }
+androidx-camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camerax" }
+androidx-camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }
+androidx-camera-view = { module = "androidx.camera:camera-view", version.ref = "camerax" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }
@@ -61,6 +83,7 @@ composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "k
 kotlinJvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 ktor = { id = "io.ktor.plugin", version.ref = "ktor" }
 kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
-
+kotlinCocoapods = { id = "org.jetbrains.kotlin.native.cocoapods", version.ref = "kotlin" }
 kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 room = { id = "androidx.room", version.ref = "room" }
+protobuf = { id = "com.google.protobuf", version = "0.9.4" }
