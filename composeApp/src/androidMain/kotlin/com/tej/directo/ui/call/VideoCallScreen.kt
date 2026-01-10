@@ -19,6 +19,10 @@ import com.tej.directo.ui.ConnectionViewModel
 import com.tej.directo.webrtc.HandshakeStage
 import com.tej.directo.discovery.DiscoveryManager
 import com.tej.directo.discovery.PeerDiscovered
+import com.tej.directo.p2p.core.discovery.ConnectionType
+import com.tej.directo.p2p.core.orchestrator.CallSessionOrchestrator
+import com.tej.directo.p2p.impl.server.KtorSignalingClient
+import com.tej.directo.p2p.impl.xmpp.XmppSignalingClient
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
@@ -83,6 +87,7 @@ fun VideoCallScreen(
     discoveryManager: DiscoveryManager,
     isHost: Boolean,
     roomCode: String,
+    connectionType: ConnectionType = ConnectionType.BLE,
     checkAndRequestBluetooth: (() -> Unit) -> Unit = {},
     onEndCall: () -> Unit
 ) {
@@ -94,36 +99,47 @@ fun VideoCallScreen(
     val localSdp by viewModel.localSdp.collectAsState()
 
     val coroutineScope = rememberCoroutineScope()
+    val orchestrator = remember { CallSessionOrchestrator(sessionManager, coroutineScope) }
 
-    // Production RCA: Handle automated handshake based on role
-    LaunchedEffect(isHost) {
+    // Production RCA: Handle automated handshake based on role and connection mode
+    LaunchedEffect(isHost, connectionType) {
         // 1. OPEN CAMERA IMMEDIATELY for everyone
         sessionManager.createPeerConnection()
-        
-        // Wait for PeerConnection to reach Ready state before proceeding
         sessionManager.connectionState.filter { it == WebRtcState.Ready }.first()
 
-        // 2. TRIGGER HANDSHAKE with Bluetooth Check
-        checkAndRequestBluetooth {
-            if (isHost) {
-                // HOST: Generate offer and start advertising
-                viewModel.prepareInvite {
-                    // localSdp is now ready, advertising starts in the other LaunchedEffect
-                }
-            } else {
-                // JOINER: Scan for the host
-                coroutineScope.launch {
-                    var alreadyConnecting = false
-                    discoveryManager.observeNearbyPeers().collect { peer ->
-                        if (!alreadyConnecting && (roomCode.isEmpty() || peer.roomCode.equals(roomCode, ignoreCase = true))) {
-                            alreadyConnecting = true
-                            Logger.d { "Found host ${peer.name} for room $roomCode. Initiating handshake..." }
-                            viewModel.initiateBleHandshake(discoveryManager, peer) {
-                                // Handshake success
+        when (connectionType) {
+            ConnectionType.BLE -> {
+                // Legacy BLE logic (refactored into orchestrator flow if needed)
+                checkAndRequestBluetooth {
+                    if (isHost) {
+                        viewModel.prepareInvite {}
+                    } else {
+                        coroutineScope.launch {
+                            var alreadyConnecting = false
+                            discoveryManager.observeNearbyPeers().collect { peer ->
+                                if (!alreadyConnecting && (roomCode.isEmpty() || peer.roomCode.equals(roomCode, ignoreCase = true))) {
+                                    alreadyConnecting = true
+                                    viewModel.initiateBleHandshake(discoveryManager, peer) {}
+                                }
                             }
                         }
                     }
                 }
+            }
+            ConnectionType.SERVER -> {
+                // Online Signaling mode
+                val serverClient = KtorSignalingClient(roomCode = roomCode)
+                orchestrator.setSignalingClient(serverClient)
+                orchestrator.startCall(isHost)
+            }
+            ConnectionType.XMPP -> {
+                // XMPP mode
+                val xmppClient = XmppSignalingClient(jid = "user@example.com")
+                orchestrator.setSignalingClient(xmppClient)
+                orchestrator.startCall(isHost)
+            }
+            else -> {
+                Logger.w { "ConnectionType $connectionType not fully integrated in orchestrator yet" }
             }
         }
     }

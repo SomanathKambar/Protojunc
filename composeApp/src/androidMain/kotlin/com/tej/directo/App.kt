@@ -37,6 +37,7 @@ import com.tej.directo.discovery.PeerDiscovered
 import com.tej.directo.discovery.AndroidPeripheralAdvertiser
 import com.tej.directo.discovery.KableDiscoveryManager
 import com.tej.directo.discovery.DiscoveryManager
+import com.tej.directo.p2p.core.discovery.ConnectionType
 
 @Composable
 fun App() {
@@ -140,20 +141,11 @@ fun App() {
                 NavHost(navController = navController, startDestination = Screen.Home.name) {
                     composable(Screen.Home.name) {
                         HomeScreen(
-                            onNavigateToInvite = { 
+                            onModeSelected = { type, isHost ->
                                 if (!isNavigating) {
                                     checkPermissions {
                                         checkAndRequestBluetooth {
-                                            navController.navigate(Screen.VideoCall.name + "?host=true")
-                                        }
-                                    }
-                                }
-                            },
-                            onNavigateToJoin = { 
-                                if (!isNavigating) {
-                                    checkPermissions {
-                                        checkAndRequestBluetooth {
-                                            navController.navigate(Screen.VideoCall.name + "?host=false")
+                                            navController.navigate(Screen.VideoCall.name + "?host=$isHost&type=${type.name}")
                                         }
                                     }
                                 }
@@ -249,21 +241,29 @@ fun App() {
                     }
                     
                     composable(
-                        route = Screen.VideoCall.name + "?host={isHost}",
+                        route = Screen.VideoCall.name + "?host={isHost}&type={type}",
                         arguments = listOf(
                             androidx.navigation.navArgument("isHost") {
                                 type = androidx.navigation.NavType.BoolType
                                 defaultValue = false
+                            },
+                            androidx.navigation.navArgument("type") {
+                                type = androidx.navigation.NavType.StringType
+                                defaultValue = ConnectionType.BLE.name
                             }
                         )
                     ) { backStackEntry ->
                         val isHost = backStackEntry.arguments?.getBoolean("isHost") ?: false
+                        val typeStr = backStackEntry.arguments?.getString("type") ?: ConnectionType.BLE.name
+                        val type = ConnectionType.valueOf(typeStr)
+                        
                         VideoCallScreen(
                             sessionManager = viewModel.sessionManager,
                             viewModel = viewModel,
                             discoveryManager = discoveryManager,
                             isHost = isHost,
                             roomCode = roomCode,
+                            connectionType = type,
                             checkAndRequestBluetooth = { checkAndRequestBluetooth(it) },
                             onEndCall = { 
                                 selectedPeer = null
