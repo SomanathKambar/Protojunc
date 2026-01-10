@@ -8,6 +8,9 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import com.tej.directo.p2p.core.discovery.DiscoveryClient
+import com.tej.directo.p2p.core.discovery.DiscoveredPeer
+import com.tej.directo.p2p.core.discovery.ConnectionType
 
 interface PeripheralAdvertiser {
     suspend fun startAdvertising(roomCode: String, serviceUuid: String, sdpPayload: String)
@@ -15,17 +18,26 @@ interface PeripheralAdvertiser {
     fun observeReceivedMessages(): Flow<String>
 }
 
-class KableDiscoveryManager(private val advertiser: PeripheralAdvertiser) : DiscoveryManager {
+class KableDiscoveryManager(private val advertiser: PeripheralAdvertiser) : DiscoveryManager, DiscoveryClient {
     private val SERVICE_UUID = uuidFrom("550e8400-e29b-41d4-a716-446655440000")
     private val SDP_CHARACTERISTIC_UUID = uuidFrom("550e8400-e29b-41d4-a716-446655440001")
     
-    // Cache discovered advertisements to allow connection later
     private val discoveredAdvertisements = mutableMapOf<String, Advertisement>()
 
+    override val discoveredPeers: Flow<List<DiscoveredPeer>> = observeNearbyPeers().map { peer ->
+        listOf(DiscoveredPeer(peer.id, peer.name, ConnectionType.BLE, mapOf("roomCode" to peer.roomCode)))
+    }
+
+    override suspend fun startDiscovery() {
+        // Handled by observeNearbyPeers
+    }
+
+    override suspend fun stopDiscovery() {
+        // Handled by advertiser
+    }
+
     override suspend fun startAdvertising(roomCode: String, payload: String) {
-        //Kable, you define a Peripheral to act as a Server
-        // We use the 'advertiser' to start broadcasting our presence
-       advertiser.startAdvertising(roomCode, "550e8400-e29b-41d4-a716-446655440000", payload)
+       advertiser.startAdvertising(roomCode, SERVICE_UUID.toString(), payload)
     }
 
     override fun observeMessages(): Flow<String> = advertiser.observeReceivedMessages()
@@ -37,7 +49,6 @@ class KableDiscoveryManager(private val advertiser: PeripheralAdvertiser) : Disc
             val id = advertisement.name ?: "Unknown-${advertisement.hashCode()}"
             discoveredAdvertisements[id] = advertisement
 
-            // Extract room code from service data if available
             val room = try {
                 advertisement.serviceData(SERVICE_UUID)?.decodeToString() ?: ""
             } catch (e: Exception) { "" }
@@ -46,7 +57,7 @@ class KableDiscoveryManager(private val advertiser: PeripheralAdvertiser) : Disc
                 id = id,
                 name = advertisement.name ?: "Unknown Peer",
                 roomCode = room,
-                remoteSdpBase64 = "", // We will connect to this peer to read the full SDP
+                remoteSdpBase64 = "",
                 rssi = advertisement.rssi
             )
         }
@@ -58,15 +69,9 @@ class KableDiscoveryManager(private val advertiser: PeripheralAdvertiser) : Disc
         val peripheral = peripheral(advertisement)
         
         try {
-            // Safety timeout for GATT operations
-            kotlinx.coroutines.withTimeout(12000) {
+            withTimeout(12000) {
                 peripheral.connect()
                 
-                // MTU negotiation is critical for reading full SDP strings in one go
-                // Note: Kable 0.32.0 commonMain Peripheral does not expose requestMtu.
-                // It must be handled in platform-specific layers if needed, 
-                // but we rely on minification to fit.
-
                 val characteristic = characteristicOf(
                     service = SERVICE_UUID.toString(),
                     characteristic = SDP_CHARACTERISTIC_UUID.toString()
@@ -86,29 +91,24 @@ class KableDiscoveryManager(private val advertiser: PeripheralAdvertiser) : Disc
         }
     }
 
-    override suspend fun writeToPeer(peer: PeerDiscovered, data: String) = coroutineScope {
+    override suspend fun writeToPeer(peer: PeerDiscovered, data: String) {
         val advertisement = discoveredAdvertisements[peer.id] 
             ?: throw IllegalStateException("Advertisement not found for peer: ${peer.name}")
 
-        val peripheral = peripheral(advertisement)
-        
-        try {
-            peripheral.connect()
-            
-            val characteristic = characteristicOf(
-                service = SERVICE_UUID.toString(),
-                characteristic = SDP_CHARACTERISTIC_UUID.toString()
-            )
-            
-            peripheral.write(characteristic, data.encodeToByteArray(), WriteType.WithResponse)
-        } finally {
-            peripheral.disconnect()
+        coroutineScope {
+            val peripheral = peripheral(advertisement)
+            try {
+                peripheral.connect()
+                val characteristic = characteristicOf(
+                    service = SERVICE_UUID.toString(),
+                    characteristic = SDP_CHARACTERISTIC_UUID.toString()
+                )
+                peripheral.write(characteristic, data.encodeToByteArray(), WriteType.WithResponse)
+            } finally {
+                peripheral.disconnect()
+            }
         }
     }
 
     override fun generateQrData(payload: String): String = payload
-
-    override suspend fun stopDiscovery() {
-        // Logic to cancel advertiser scope
-    }
 }

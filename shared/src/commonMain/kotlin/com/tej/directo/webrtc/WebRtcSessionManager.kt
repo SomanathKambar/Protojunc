@@ -1,6 +1,7 @@
 package com.tej.directo.webrtc
 
 import com.shepeliev.webrtckmp.*
+import com.tej.directo.models.IceCandidateModel
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import co.touchlab.kermit.Logger
@@ -25,7 +26,8 @@ class WebRtcSessionManager {
     val remoteVideoTrack = MutableStateFlow<VideoTrack?>(null)
     val localVideoTrack = MutableStateFlow<VideoTrack?>(null)
     
-    private val _iceCandidates = MutableStateFlow<List<IceCandidate>>(emptyList())
+    private val _iceCandidates = MutableSharedFlow<IceCandidateModel>(extraBufferCapacity = 64)
+    val iceCandidates = _iceCandidates.asSharedFlow()
 
     fun reset() {
         _errorMessage.value = null
@@ -33,7 +35,6 @@ class WebRtcSessionManager {
         _connectionState.value = WebRtcState.Idle
         remoteVideoTrack.value = null
         localVideoTrack.value = null
-        _iceCandidates.value = emptyList()
     }
 
     suspend fun createPeerConnection() {
@@ -54,25 +55,14 @@ class WebRtcSessionManager {
             try {
                 Logger.d { "Requesting User Media (Selfie)..." }
                 val stream = MediaDevices.getUserMedia(audio = true, video = true)
-                Logger.d { "Media Stream obtained. Tracks: ${stream.audioTracks.size} audio, ${stream.videoTracks.size} video" }
                 
-                // Set local video track immediately for preview
                 val videoTrack = stream.videoTracks.firstOrNull()
                 if (videoTrack != null) {
                     localVideoTrack.value = videoTrack
-                    Logger.d { "Local video track set: ${videoTrack.id}" }
                 }
 
-                stream.audioTracks.forEach { track -> 
-                    pc.addTrack(track, stream) 
-                }
-                stream.videoTracks.forEach { track ->
-                    pc.addTrack(track, stream)
-                }
-                
-                if (stream.videoTracks.isEmpty()) {
-                    Logger.w { "No video tracks found in stream!" }
-                }
+                stream.audioTracks.forEach { track -> pc.addTrack(track, stream) }
+                stream.videoTracks.forEach { track -> pc.addTrack(track, stream) }
             } catch (mediaError: Exception) {
                 Logger.e(mediaError) { "Failed to get user media" }
                 _errorMessage.value = "Camera Error: ${mediaError.message}"
@@ -80,32 +70,22 @@ class WebRtcSessionManager {
 
             pc.onIceCandidate
                 .onEach { candidate ->
-                    _iceCandidates.value = _iceCandidates.value + candidate
-                    Logger.d { "New ICE Candidate received" }
+                    _iceCandidates.emit(IceCandidateModel(
+                        sdp = candidate.sdp,
+                        sdpMid = candidate.sdpMid,
+                        sdpMLineIndex = candidate.sdpMLineIndex
+                    ))
                 }
                 .launchIn(scope)
 
             pc.onConnectionStateChange
                 .onEach { state ->
-                    Logger.d { "PeerConnection State Change: $state" }
                     _connectionState.value = when(state) {
                         PeerConnectionState.New -> WebRtcState.Ready
-                        PeerConnectionState.Connecting -> {
-                            _progressMessage.value = "Connecting..."
-                            WebRtcState.Connecting
-                        }
-                        PeerConnectionState.Connected -> {
-                            _progressMessage.value = "Link Established"
-                            WebRtcState.Connected
-                        }
-                        PeerConnectionState.Failed -> {
-                            _errorMessage.value = "Connection Failed"
-                            WebRtcState.Failed
-                        }
-                        PeerConnectionState.Disconnected -> {
-                            _errorMessage.value = "Disconnected"
-                            WebRtcState.Failed
-                        }
+                        PeerConnectionState.Connecting -> WebRtcState.Connecting
+                        PeerConnectionState.Connected -> WebRtcState.Connected
+                        PeerConnectionState.Failed -> WebRtcState.Failed
+                        PeerConnectionState.Disconnected -> WebRtcState.Failed
                         PeerConnectionState.Closed -> WebRtcState.Closed
                         else -> _connectionState.value
                     }
@@ -115,7 +95,6 @@ class WebRtcSessionManager {
             pc.onTrack
                 .onEach { event ->
                     val track = event.track
-                    Logger.d { "Received Remote Track: ${track?.kind}" }
                     if (track is VideoTrack) {
                         remoteVideoTrack.value = track
                     }
@@ -131,57 +110,35 @@ class WebRtcSessionManager {
         }
     }
 
-    private suspend fun PeerConnection.waitForIceGathering() {
-        if (iceGatheringState == IceGatheringState.Complete) return
-        
-        var attempts = 0
-        while (iceGatheringState != IceGatheringState.Complete && attempts < 20) {
-            delay(100)
-            attempts++
-            if (attempts > 10 && _iceCandidates.value.size >= 2) break
-        }
-        Logger.d { "ICE Gathering finished/timed out after ${attempts * 100}ms. Candidates: ${_iceCandidates.value.size}" }
+    suspend fun addIceCandidate(model: IceCandidateModel) {
+        peerConnection?.addIceCandidate(IceCandidate(
+            sdpMid = model.sdpMid ?: "",
+            sdpMLineIndex = model.sdpMLineIndex,
+            sdp = model.sdp
+        ))
     }
 
     suspend fun createOffer(): String? {
         val pc = peerConnection ?: return null
-        _progressMessage.value = "Generating Offer..."
         val offer = pc.createOffer(OfferAnswerOptions())
         pc.setLocalDescription(offer)
-        
-        _progressMessage.value = "Gathering Candidates..."
-        pc.waitForIceGathering()
-
-        if (peerConnection != pc) return null
-        
-        _progressMessage.value = "Ready"
         return pc.localDescription?.sdp
     }
 
     suspend fun handleRemoteDescription(sdp: String, type: SessionDescriptionType) {
-        _progressMessage.value = "Applying Remote Description..."
         try {
             val description = SessionDescription(type, sdp)
             peerConnection?.setRemoteDescription(description)
         } catch (e: Exception) {
-            val error = "Native SDP Error: ${e.message}"
-            _errorMessage.value = error
+            _errorMessage.value = "Native SDP Error: ${e.message}"
             throw e
         }
     }
 
     suspend fun createAnswer(): String? {
         val pc = peerConnection ?: return null
-        _progressMessage.value = "Generating Answer..."
         val answer = pc.createAnswer(OfferAnswerOptions())
         pc.setLocalDescription(answer)
-        
-        _progressMessage.value = "Gathering Candidates..."
-        pc.waitForIceGathering()
-
-        if (peerConnection != pc) return null
-        
-        _progressMessage.value = "Ready"
         return pc.localDescription?.sdp
     }
 
