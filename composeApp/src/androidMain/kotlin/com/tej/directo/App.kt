@@ -386,8 +386,19 @@ fun SelectionScreen(
         Spacer(modifier = Modifier.height(16.dp))
         Button(
             onClick = { 
-                // Navigation to Online Call mode (for now we will reuse VideoCall with a flag)
-                onQr() // Placeholder, ideally a new callback
+                // Placeholder for WiFi Direct/BT Socket refined flow
+                onQr() 
+            }, 
+            modifier = Modifier.fillMaxWidth().height(56.dp),
+            enabled = !processing
+        ) { 
+            Text("Via BT Socket") 
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(
+            onClick = { 
+                // Navigation to Online Call mode
+                onQr()
             }, 
             modifier = Modifier.fillMaxWidth().height(56.dp),
             enabled = !processing

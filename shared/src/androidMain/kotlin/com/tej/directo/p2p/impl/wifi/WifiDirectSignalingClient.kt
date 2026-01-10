@@ -5,6 +5,8 @@ import com.tej.directo.p2p.core.signaling.SignalingMessage
 import com.tej.directo.p2p.core.signaling.SignalingState
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.encodeToString
 import java.net.ServerSocket
 import java.net.Socket
 import co.touchlab.kermit.Logger
@@ -45,14 +47,14 @@ class WifiDirectSignalingClient(
 
     private fun startListening() {
         scope.launch {
-            val inputStream = socket?.getInputStream() ?: return@launch
-            val reader = inputStream.bufferedReader()
+            val reader = socket?.getInputStream()?.bufferedReader() ?: return@launch
             while (isActive) {
                 try {
                     val line = reader.readLine() ?: break
-                    // Here we would decode the message (JSON/Protobuf)
-                    // For now, placeholder decoding
+                    val message = Json.decodeFromString<SignalingMessage>(line)
+                    _messages.emit(message)
                 } catch (e: Exception) {
+                    Logger.e(e) { "WiFi Direct Socket read error" }
                     break
                 }
             }
@@ -63,8 +65,9 @@ class WifiDirectSignalingClient(
     override suspend fun sendMessage(message: SignalingMessage) {
         withContext(Dispatchers.IO) {
             try {
-                val outputStream = socket?.getOutputStream()
-                // outputStream?.write(...)
+                val text = Json.encodeToString(message) + "\n"
+                socket?.outputStream?.write(text.toByteArray())
+                socket?.outputStream?.flush()
             } catch (e: Exception) {
                 Logger.e(e) { "Failed to send message over WiFi Direct socket" }
             }

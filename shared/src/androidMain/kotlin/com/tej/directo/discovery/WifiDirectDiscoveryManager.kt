@@ -37,15 +37,19 @@ class WifiDirectDiscoveryManager(
         manager?.stopPeerDiscovery(channel, null)
     }
 
-    // This would be called by a BroadcastReceiver in a real app
-    fun updatePeerList(deviceList: List<WifiP2pDevice>) {
-        _peers.value = deviceList.map { device ->
-            DiscoveredPeer(
-                id = device.deviceAddress,
-                name = device.deviceName,
-                connectionType = ConnectionType.WIFI_DIRECT,
-                metadata = mapOf("status" to device.status.toString())
-            )
+    fun connectToPeer(peer: DiscoveredPeer, onConnected: (String) -> Unit) {
+        val config = WifiP2pConfig().apply {
+            deviceAddress = peer.id
         }
+        
+        manager?.connect(channel, config, object : WifiP2pManager.ActionListener {
+            override fun onSuccess() {
+                Logger.d { "WiFi Direct Connection Initiated" }
+                // Connection info will be received via BroadcastReceiver and then onConnected called
+            }
+            override fun onFailure(reason: Int) {
+                Logger.e { "WiFi Direct Connection Failed: $reason" }
+            }
+        })
     }
 }
