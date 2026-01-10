@@ -70,16 +70,13 @@ class WebRtcSessionManager {
 
             pc.onIceCandidate
                 .onEach { candidate ->
-                    _iceCandidates.emit(IceCandidateModel(
-                        sdp = candidate.sdp,
-                        sdpMid = candidate.sdpMid,
-                        sdpMLineIndex = candidate.sdpMLineIndex
-                    ))
+                    _iceCandidates.emit(candidate.toModel())
                 }
                 .launchIn(scope)
 
             pc.onConnectionStateChange
                 .onEach { state ->
+                    Logger.d { "PeerConnection State Change: $state" }
                     _connectionState.value = when(state) {
                         PeerConnectionState.New -> WebRtcState.Ready
                         PeerConnectionState.Connecting -> WebRtcState.Connecting
@@ -111,17 +108,21 @@ class WebRtcSessionManager {
     }
 
     suspend fun addIceCandidate(model: IceCandidateModel) {
-        peerConnection?.addIceCandidate(IceCandidate(
-            sdpMid = model.sdpMid ?: "",
-            sdpMLineIndex = model.sdpMLineIndex,
-            sdp = model.sdp
-        ))
+        peerConnection?.addIceCandidate(createIceCandidate(model))
     }
 
     suspend fun createOffer(): String? {
         val pc = peerConnection ?: return null
         val offer = pc.createOffer(OfferAnswerOptions())
         pc.setLocalDescription(offer)
+        
+        // Wait for ICE gathering to finish or time out
+        var attempts = 0
+        while (pc.iceGatheringState != IceGatheringState.Complete && attempts < 20) {
+            delay(100)
+            attempts++
+        }
+        
         return pc.localDescription?.sdp
     }
 
@@ -139,6 +140,13 @@ class WebRtcSessionManager {
         val pc = peerConnection ?: return null
         val answer = pc.createAnswer(OfferAnswerOptions())
         pc.setLocalDescription(answer)
+        
+        var attempts = 0
+        while (pc.iceGatheringState != IceGatheringState.Complete && attempts < 20) {
+            delay(100)
+            attempts++
+        }
+        
         return pc.localDescription?.sdp
     }
 

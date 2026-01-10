@@ -47,7 +47,7 @@ class CallSessionOrchestrator(
                 webRtcManager.addIceCandidate(IceCandidateModel(
                     sdp = message.iceCandidate!!,
                     sdpMid = message.sdpMid,
-                    sdpMLineIndex = message.sdpMLineIndex!!
+                    sdpMLineIndex = message.sdpMLineIndex ?: 0
                 ))
             }
             SignalingMessage.Type.BYE -> {
@@ -70,12 +70,12 @@ class CallSessionOrchestrator(
         
         // Observe local ICE candidates and send them
         webRtcManager.iceCandidates
-            .onEach { candidate ->
+            .onEach { model ->
                 activeSignalingClient?.sendMessage(SignalingMessage(
                     type = SignalingMessage.Type.ICE_CANDIDATE,
-                    iceCandidate = candidate.sdp,
-                    sdpMid = candidate.sdpMid,
-                    sdpMLineIndex = candidate.sdpMLineIndex,
+                    iceCandidate = model.sdp,
+                    sdpMid = model.sdpMid,
+                    sdpMLineIndex = model.sdpMLineIndex,
                     senderId = "local"
                 ))
             }
