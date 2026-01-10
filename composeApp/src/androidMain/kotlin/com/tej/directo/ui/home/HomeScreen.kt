@@ -40,7 +40,7 @@ fun HomeScreen(
                 ModeCard(
                     title = "WiFi Direct",
                     subtitle = "High Speed Local",
-                    icon = Icons.Default.SettingsInputAntenna, // Using standard available icon
+                    icon = Icons.Default.SettingsInputAntenna,
                     onClick = { showRoleDialog = ConnectionType.WIFI_DIRECT }
                 )
             }
@@ -49,7 +49,7 @@ fun HomeScreen(
                     title = "BT Socket",
                     subtitle = "Robust Stream",
                     icon = Icons.Default.BluetoothAudio,
-                    onClick = { showRoleDialog = ConnectionType.SERVER } 
+                    onClick = { showRoleDialog = ConnectionType.BT_SOCKET } 
                 )
             }
             item {
@@ -65,7 +65,7 @@ fun HomeScreen(
                     title = "Online Call",
                     subtitle = "Via Global Server",
                     icon = Icons.Default.Language,
-                    onClick = { showRoleDialog = ConnectionType.SERVER }
+                    onClick = { showRoleDialog = ConnectionType.ONLINE }
                 )
             }
             item {
@@ -81,7 +81,7 @@ fun HomeScreen(
                     title = "QR Code",
                     subtitle = "Manual Handshake",
                     icon = Icons.Default.QrCode,
-                    onClick = { onModeSelected(ConnectionType.BLE, true) } 
+                    onClick = { showRoleDialog = ConnectionType.QR } 
                 )
             }
         }

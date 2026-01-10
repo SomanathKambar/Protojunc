@@ -145,6 +145,8 @@ fun App() {
                                 if (!isNavigating) {
                                     checkPermissions {
                                         checkAndRequestBluetooth {
+                                            // Ensure we pop potential stale call state before starting new mode
+                                            viewModel.cancel()
                                             navController.navigate(Screen.VideoCall.name + "?host=$isHost&type=${type.name}")
                                         }
                                     }

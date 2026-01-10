@@ -10,7 +10,11 @@ data class DiscoveredPeer(
 )
 
 enum class ConnectionType {
-    BLE, WIFI_DIRECT, SERVER, XMPP
+    BLE, WIFI_DIRECT, BT_SOCKET, ONLINE, XMPP, QR
+}
+
+enum class ConnectionMode {
+    ADVERTISE, SCAN, QR_SHOW, QR_SCAN
 }
 
 interface DiscoveryClient {

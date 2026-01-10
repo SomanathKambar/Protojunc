@@ -7,6 +7,10 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.protobuf.ProtoBuf
 import kotlinx.serialization.encodeToByteArray
 import kotlinx.serialization.decodeFromByteArray
+import okio.Buffer
+import okio.GzipSink
+import okio.GzipSource
+import okio.buffer
 
 @OptIn(ExperimentalEncodingApi::class, ExperimentalSerializationApi::class)
 object SignalingEncoder {
@@ -15,25 +19,38 @@ object SignalingEncoder {
         encodeDefaults = true
     }
 
+    /**
+     * Encodes payload: Protobuf -> Gzip -> Base64
+     */
     fun encode(payload: SignalingPayload): String {
         val bytes = protoBuf.encodeToByteArray(SignalingPayload.serializer(), payload)
-        return Base64.UrlSafe.encode(bytes)
+        
+        val buffer = Buffer()
+        GzipSink(buffer).buffer().use { it.write(bytes) }
+        val compressedBytes = buffer.readByteArray()
+        
+        return Base64.UrlSafe.encode(compressedBytes)
     }
 
+    /**
+     * Decodes payload: Base64 -> Gzip -> Protobuf
+     */
     fun decode(encoded: String): SignalingPayload {
         val cleaned = encoded.trim()
-        
-        if (cleaned.isEmpty()) {
-            throw IllegalArgumentException("Received empty payload")
-        }
+        if (cleaned.isEmpty()) throw IllegalArgumentException("Received empty payload")
 
         return try {
-            val bytes = Base64.UrlSafe.decode(cleaned)
-            protoBuf.decodeFromByteArray(SignalingPayload.serializer(), bytes)
+            val compressedBytes = Base64.UrlSafe.decode(cleaned)
+            
+            val buffer = Buffer()
+            buffer.write(compressedBytes)
+            val decompressedBytes = GzipSource(buffer).buffer().use { it.readByteArray() }
+            
+            protoBuf.decodeFromByteArray(SignalingPayload.serializer(), decompressedBytes)
         } catch (e: Exception) {
-            // Fallback for raw SDP if needed, but primarily handle encoded payload
-            if (cleaned.startsWith("v=0")) {
-                val type = if (cleaned.contains("a=setup:active")) "ANSWER" else "OFFER"
+            // Fallback for non-compressed raw SDP (backward compatibility during transition)
+            if (cleaned.startsWith("v=0") || cleaned.contains("§")) {
+                val type = if (cleaned.contains("a=setup:active") || cleaned.contains("§Sactive")) "ANSWER" else "OFFER"
                 SignalingPayload(cleaned, type, emptyList(), 0)
             } else {
                 throw e

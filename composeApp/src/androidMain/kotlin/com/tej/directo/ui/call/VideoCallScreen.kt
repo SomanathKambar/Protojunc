@@ -12,6 +12,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
 import com.tej.directo.webrtc.WebRtcSessionManager
 import com.tej.directo.webrtc.WebRtcState
@@ -109,7 +110,6 @@ fun VideoCallScreen(
 
         when (connectionType) {
             ConnectionType.BLE -> {
-                // Legacy BLE logic (refactored into orchestrator flow if needed)
                 checkAndRequestBluetooth {
                     if (isHost) {
                         viewModel.prepareInvite {}
@@ -126,27 +126,30 @@ fun VideoCallScreen(
                     }
                 }
             }
-            ConnectionType.SERVER -> {
-                // Online Signaling mode
+            ConnectionType.ONLINE -> {
                 val serverClient = KtorSignalingClient(roomCode = roomCode)
                 orchestrator.setSignalingClient(serverClient)
                 orchestrator.startCall(isHost)
             }
             ConnectionType.XMPP -> {
-                // XMPP mode
                 val xmppClient = XmppSignalingClient(jid = "user@example.com")
                 orchestrator.setSignalingClient(xmppClient)
                 orchestrator.startCall(isHost)
             }
+            ConnectionType.QR -> {
+                if (isHost) {
+                    viewModel.prepareInvite {}
+                }
+            }
             else -> {
-                Logger.w { "ConnectionType $connectionType not fully integrated in orchestrator yet" }
+                Logger.w { "ConnectionType $connectionType logic not implemented" }
             }
         }
     }
 
-    // Auto-broadcast if we are host and offer is ready
+    // Auto-broadcast if we are host and offer is ready (for BLE mode)
     LaunchedEffect(localSdp) {
-        if (isHost && localSdp != null) {
+        if (isHost && localSdp != null && connectionType == ConnectionType.BLE) {
             checkAndRequestBluetooth {
                 coroutineScope.launch {
                     try {
@@ -170,6 +173,31 @@ fun VideoCallScreen(
                 videoTrack = remoteTrack,
                 modifier = Modifier.fillMaxSize()
             )
+        } else if (connectionType == ConnectionType.QR && remoteTrack == null) {
+            // QR Handshake Layer
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                if (isHost) {
+                    if (localSdp != null) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Partner scans this QR", color = Color.White, style = MaterialTheme.typography.titleLarge)
+                            Spacer(Modifier.height(24.dp))
+                            val qrBitmap = remember(localSdp) { 
+                                com.tej.directo.util.QrUtils.generateQrCode(localSdp!!) 
+                            }
+                            if (qrBitmap != null) {
+                                androidx.compose.foundation.Image(
+                                    bitmap = qrBitmap.asImageBitmap(),
+                                    contentDescription = "Offer",
+                                    modifier = Modifier.size(300.dp).background(Color.White).padding(12.dp)
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    // Joiner Scanner UI placeholder
+                    Text("Scanner active... Point at Host's QR", color = Color.White)
+                }
+            }
         } else {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -251,7 +279,7 @@ fun VideoCallScreen(
         }
 
         // Detailed Progress Overlay (Intermittent State Tracker)
-        if (remoteTrack == null && connectionState != WebRtcState.Connected) {
+        if (remoteTrack == null && connectionState != WebRtcState.Connected && connectionType != ConnectionType.QR) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
