@@ -8,5 +8,7 @@ enum class Screen {
     JoinQr,
     InviteBle,
     JoinBle,
+    BluetoothDirectCall,
+    WifiDirectCall,
     VideoCall
 }

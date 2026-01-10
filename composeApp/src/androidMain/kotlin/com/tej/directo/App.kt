@@ -38,6 +38,10 @@ import com.tej.directo.discovery.AndroidPeripheralAdvertiser
 import com.tej.directo.discovery.KableDiscoveryManager
 import com.tej.directo.discovery.DiscoveryManager
 import com.tej.directo.p2p.core.discovery.ConnectionType
+import com.tej.directo.bluetooth.AndroidBluetoothCallManager
+import com.tej.directo.bluetooth.AndroidWifiDirectCallManager
+import com.tej.directo.ui.bluetooth.BluetoothCallScreen
+import com.tej.directo.ui.wifi.WifiDirectCallScreen
 
 @Composable
 fun App() {
@@ -64,6 +68,8 @@ fun App() {
         AndroidPeripheralAdvertiser(context, manager.adapter)
     }
     val discoveryManager: DiscoveryManager = remember { KableDiscoveryManager(advertiser) }
+    val bluetoothCallManager = remember { AndroidBluetoothCallManager(context, scope) }
+    val wifiDirectCallManager = remember { AndroidWifiDirectCallManager(context, scope) }
 
     // Reset navigation lock after a timeout as a safety measure
     LaunchedEffect(isNavigating) {
@@ -147,7 +153,13 @@ fun App() {
                                         checkAndRequestBluetooth {
                                             // Ensure we pop potential stale call state before starting new mode
                                             viewModel.cancel()
-                                            navController.navigate(Screen.VideoCall.name + "?host=$isHost&type=${type.name}")
+                                            if (type == ConnectionType.BT_SOCKET) {
+                                                navController.navigate(Screen.BluetoothDirectCall.name)
+                                            } else if (type == ConnectionType.WIFI_DIRECT) {
+                                                navController.navigate(Screen.WifiDirectCall.name)
+                                            } else {
+                                                navController.navigate(Screen.VideoCall.name + "?host=$isHost&type=${type.name}")
+                                            }
                                         }
                                     }
                                 }
@@ -272,6 +284,20 @@ fun App() {
                                 viewModel.endCall()
                                 navController.popBackStack(Screen.Home.name, false) 
                             }
+                        )
+                    }
+
+                    composable(Screen.BluetoothDirectCall.name) {
+                        BluetoothCallScreen(
+                            manager = bluetoothCallManager,
+                            onBack = { navController.popBackStack() }
+                        )
+                    }
+
+                    composable(Screen.WifiDirectCall.name) {
+                        WifiDirectCallScreen(
+                            manager = wifiDirectCallManager,
+                            onBack = { navController.popBackStack() }
                         )
                     }
 
