@@ -52,8 +52,13 @@ class WebRtcSessionManager {
             // Initialize Camera & Mic
             _progressMessage.value = "Starting Media..."
             try {
-                val stream = MediaDevices.getUserMedia(audio = true, video = true)
-                Logger.d { "Media Stream obtained: ${stream.id}. Tracks: ${stream.audioTracks.size} audio, ${stream.videoTracks.size} video" }
+                val stream = MediaDevices.getUserMedia {
+                    audio()
+                    video {
+                        facingMode(FacingMode.User)
+                    }
+                }
+                Logger.d { "Media Stream obtained. Tracks: ${stream.audioTracks.size} audio, ${stream.videoTracks.size} video" }
                 
                 stream.audioTracks.forEach { track -> 
                     Logger.d { "Adding audio track: ${track.id}" }

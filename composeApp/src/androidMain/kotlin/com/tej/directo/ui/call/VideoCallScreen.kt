@@ -19,6 +19,7 @@ import com.tej.directo.ui.ConnectionViewModel
 import com.tej.directo.webrtc.HandshakeStage
 import com.tej.directo.discovery.DiscoveryManager
 import com.tej.directo.discovery.PeerDiscovered
+import kotlinx.coroutines.launch
 
 @Composable
 fun VideoCallScreen(
@@ -27,6 +28,7 @@ fun VideoCallScreen(
     discoveryManager: DiscoveryManager,
     isHost: Boolean,
     roomCode: String,
+    checkAndRequestBluetooth: (() -> Unit) -> Unit = {},
     onEndCall: () -> Unit
 ) {
     val remoteTrack by sessionManager.remoteVideoTrack.collectAsState()
@@ -36,24 +38,31 @@ fun VideoCallScreen(
     val handshakeStage by viewModel.handshakeStage.collectAsState()
     val localSdp by viewModel.localSdp.collectAsState()
 
+    val coroutineScope = rememberCoroutineScope()
+
     // Production RCA: Handle automated handshake based on role
     LaunchedEffect(isHost) {
-        // Open Camera immediately for everyone
+        // 1. OPEN CAMERA IMMEDIATELY for everyone - This fulfills "atleast user selfie camera turn on"
         sessionManager.createPeerConnection()
         
-        if (isHost) {
-            // HOST: Generate offer and start advertising
-            viewModel.prepareInvite {
-                // localSdp is now ready, advertising starts in the other LaunchedEffect
-            }
-        } else {
-            // JOINER: Scan for the host
-            var alreadyConnecting = false
-            discoveryManager.observeNearbyPeers().collect { peer ->
-                if (!alreadyConnecting && (roomCode.isEmpty() || peer.roomCode.equals(roomCode, ignoreCase = true))) {
-                    alreadyConnecting = true
-                    viewModel.initiateBleHandshake(discoveryManager, peer) {
-                        // Handshake success
+        // 2. TRIGGER HANDSHAKE with Bluetooth Check
+        checkAndRequestBluetooth {
+            if (isHost) {
+                // HOST: Generate offer and start advertising
+                viewModel.prepareInvite {
+                    // localSdp is now ready, advertising starts in the other LaunchedEffect
+                }
+            } else {
+                // JOINER: Scan for the host
+                coroutineScope.launch {
+                    var alreadyConnecting = false
+                    discoveryManager.observeNearbyPeers().collect { peer ->
+                        if (!alreadyConnecting && (roomCode.isEmpty() || peer.roomCode.equals(roomCode, ignoreCase = true))) {
+                            alreadyConnecting = true
+                            viewModel.initiateBleHandshake(discoveryManager, peer) {
+                                // Handshake success
+                            }
+                        }
                     }
                 }
             }
@@ -63,18 +72,22 @@ fun VideoCallScreen(
     // Auto-broadcast if we are host and offer is ready
     LaunchedEffect(localSdp) {
         if (isHost && localSdp != null) {
-            try {
-                // Use roomCode for advertising, but Joiner will ignore it for speed
-                discoveryManager.startAdvertising(roomCode, localSdp!!)
-                
-                // Host listens for the Answer
-                discoveryManager.observeMessages().collect { answer ->
-                    viewModel.handleAnswerScanned(answer) {
-                        // Handshake complete
+            checkAndRequestBluetooth {
+                coroutineScope.launch {
+                    try {
+                        // Use roomCode for advertising, but Joiner will ignore it for speed
+                        discoveryManager.startAdvertising(roomCode, localSdp!!)
+                        
+                        // Host listens for the Answer
+                        discoveryManager.observeMessages().collect { answer ->
+                            viewModel.handleAnswerScanned(answer) {
+                                // Handshake complete
+                            }
+                        }
+                    } catch (e: Exception) {
+                        // Handle advertising failure
                     }
                 }
-            } catch (e: Exception) {
-                // Handle advertising failure
             }
         }
     }

@@ -158,14 +158,18 @@ fun App() {
                             onNavigateToInvite = { 
                                 if (!isNavigating) {
                                     checkPermissions {
-                                        navController.navigate(Screen.VideoCall.name + "?host=true")
+                                        checkAndRequestBluetooth {
+                                            navController.navigate(Screen.VideoCall.name + "?host=true")
+                                        }
                                     }
                                 }
                             },
                             onNavigateToJoin = { 
                                 if (!isNavigating) {
                                     checkPermissions {
-                                        navController.navigate(Screen.VideoCall.name + "?host=false")
+                                        checkAndRequestBluetooth {
+                                            navController.navigate(Screen.VideoCall.name + "?host=false")
+                                        }
                                     }
                                 }
                             },
@@ -275,6 +279,7 @@ fun App() {
                             discoveryManager = discoveryManager,
                             isHost = isHost,
                             roomCode = roomCode,
+                            checkAndRequestBluetooth = { checkAndRequestBluetooth(it) },
                             onEndCall = { 
                                 selectedPeer = null
                                 viewModel.endCall()
