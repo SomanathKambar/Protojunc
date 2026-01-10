@@ -96,24 +96,26 @@ fun App() {
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
-        // Check if at least essential permissions are granted (Camera/Audio)
         val essential = listOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
         val essentialGranted = essential.all { results[it] == true }
         
         if (essentialGranted) {
-            pendingNavigation?.let { screen ->
-                navController.navigate(screen.name)
-            }
+            // After permissions are granted, continue the action
+            pendingBluetoothAction?.invoke()
         }
         pendingNavigation = null
+        pendingBluetoothAction = null
         isNavigating = false
     }
 
     val checkPermissions = { onGranted: () -> Unit ->
-        val required = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            listOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
+        val required = mutableListOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            required.add(Manifest.permission.BLUETOOTH_SCAN)
+            required.add(Manifest.permission.BLUETOOTH_ADVERTISE)
+            required.add(Manifest.permission.BLUETOOTH_CONNECT)
         } else {
-            listOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO, Manifest.permission.ACCESS_FINE_LOCATION)
+            required.add(Manifest.permission.ACCESS_FINE_LOCATION)
         }
         
         val allGranted = required.all {
@@ -123,26 +125,9 @@ fun App() {
         if (allGranted) {
             onGranted()
         } else {
-            val allToRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                arrayOf(
-                    Manifest.permission.CAMERA,
-                    Manifest.permission.RECORD_AUDIO,
-                    Manifest.permission.BLUETOOTH_SCAN,
-                    Manifest.permission.BLUETOOTH_ADVERTISE,
-                    Manifest.permission.BLUETOOTH_CONNECT,
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION
-                )
-            } else {
-                arrayOf(
-                    Manifest.permission.CAMERA,
-                    Manifest.permission.RECORD_AUDIO,
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION
-                )
-            }
             isNavigating = true
-            permissionLauncher.launch(allToRequest)
+            pendingBluetoothAction = onGranted
+            permissionLauncher.launch(required.toTypedArray())
         }
     }
 

@@ -22,6 +22,8 @@ fun WebRtcVideoView(
                 init(eglBase.eglBaseContext, null)
                 setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
                 setMirror(mirror)
+                // Add sink immediately if track is already available
+                videoTrack?.addSink(this)
             }
         },
         modifier = modifier,

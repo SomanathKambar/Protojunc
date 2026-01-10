@@ -52,27 +52,24 @@ class WebRtcSessionManager {
             // Initialize Camera & Mic
             _progressMessage.value = "Starting Media..."
             try {
-                val stream = MediaDevices.getUserMedia {
-                    audio()
-                    video {
-                        facingMode(FacingMode.User)
-                    }
-                }
+                Logger.d { "Requesting User Media..." }
+                val stream = MediaDevices.getUserMedia(audio = true, video = true)
                 Logger.d { "Media Stream obtained. Tracks: ${stream.audioTracks.size} audio, ${stream.videoTracks.size} video" }
                 
                 stream.audioTracks.forEach { track -> 
-                    Logger.d { "Adding audio track: ${track.id}" }
                     pc.addTrack(track, stream) 
                 }
                 stream.videoTracks.forEach { track ->
-                    Logger.d { "Adding video track: ${track.id}" }
                     pc.addTrack(track, stream)
                     localVideoTrack.value = track
+                }
+                
+                if (stream.videoTracks.isEmpty()) {
+                    Logger.w { "No video tracks found in stream!" }
                 }
             } catch (mediaError: Exception) {
                 Logger.e(mediaError) { "Failed to get user media" }
                 _errorMessage.value = "Camera Error: ${mediaError.message}"
-                // Don't throw yet, try to continue with connection if possible, or fail gracefully
             }
 
             pc.onIceCandidate
@@ -112,7 +109,7 @@ class WebRtcSessionManager {
             pc.onTrack
                 .onEach { event ->
                     val track = event.track
-                    Logger.d { "Received Remote Track: ${track?.kind} id: ${track?.id}" }
+                    Logger.d { "Received Remote Track: ${track?.kind}" }
                     if (track is VideoTrack) {
                         remoteVideoTrack.value = track
                     }
@@ -131,12 +128,10 @@ class WebRtcSessionManager {
     private suspend fun PeerConnection.waitForIceGathering() {
         if (iceGatheringState == IceGatheringState.Complete) return
         
-        // Wait up to 2 seconds for ICE gathering
         var attempts = 0
         while (iceGatheringState != IceGatheringState.Complete && attempts < 20) {
             delay(100)
             attempts++
-            // If we already have a few candidates (Host + SRFLX), 1 second is enough to proceed
             if (attempts > 10 && _iceCandidates.value.size >= 2) break
         }
         Logger.d { "ICE Gathering finished/timed out after ${attempts * 100}ms. Candidates: ${_iceCandidates.value.size}" }
@@ -158,15 +153,6 @@ class WebRtcSessionManager {
     }
 
     suspend fun handleRemoteDescription(sdp: String, type: SessionDescriptionType) {
-        _progressMessage.value = "Validating SDP..."
-        
-        // RCA: WebRTC native layer often returns Null if the string doesn't contain 'v=0' or 'm='
-        if (!sdp.contains("v=0") || !sdp.contains("m=")) {
-            val error = "Malformed SDP: Essential markers missing. Content: ${sdp.take(30)}..."
-            _errorMessage.value = error
-            throw IllegalArgumentException(error)
-        }
-
         _progressMessage.value = "Applying Remote Description..."
         try {
             val description = SessionDescription(type, sdp)
