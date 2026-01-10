@@ -4,7 +4,7 @@ import kotlinx.coroutines.flow.Flow
 
 interface DiscoveryManager {
     // BLE: Broadcast our SDP payload to nearby devices
-    suspend fun startAdvertising(payload: String)
+    suspend fun startAdvertising(roomCode: String, payload: String)
 
     // BLE: Scan for other peers broadcasting their SDP
     fun observeNearbyPeers(): Flow<PeerDiscovered>
@@ -27,6 +27,7 @@ interface DiscoveryManager {
 data class PeerDiscovered(
     val id: String,
     val name: String,
+    val roomCode: String,
     val remoteSdpBase64: String,
     val rssi: Int // Signal strength
 )

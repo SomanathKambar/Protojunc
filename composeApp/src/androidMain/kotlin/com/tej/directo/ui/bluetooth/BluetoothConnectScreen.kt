@@ -1,26 +1,46 @@
 package com.tej.directo.ui.bluetooth
 
-import androidx.compose.foundation.layout.*
+import android.bluetooth.BluetoothManager
+import android.content.Context
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowForward
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.tej.directo.discovery.AndroidPeripheralAdvertiser
+import com.tej.directo.discovery.DiscoveryManager
 import com.tej.directo.discovery.KableDiscoveryManager
 import com.tej.directo.discovery.PeerDiscovered
-import com.tej.directo.discovery.DiscoveryManager
-import android.content.Context
-import android.bluetooth.BluetoothManager
 import kotlinx.coroutines.launch
 
 @Composable
 fun InviteBleScreen(
+    localOfferSdp: String?,
+    roomCode: String,
     onAnswerReceived: (String) -> Unit,
     onBack: () -> Unit
 ) {
@@ -34,14 +54,16 @@ fun InviteBleScreen(
 
     var error by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(localOfferSdp) {
+        if (localOfferSdp == null) return@LaunchedEffect
+        
         val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         if (!manager.adapter.isEnabled) {
             error = "Bluetooth is disabled. Please enable it."
             return@LaunchedEffect
         }
         try {
-            discoveryManager.startAdvertising("SDP_OFFER_PENDING")
+            discoveryManager.startAdvertising(roomCode, localOfferSdp)
             
             discoveryManager.observeMessages().collect { answer ->
                 onAnswerReceived(answer)
@@ -56,9 +78,13 @@ fun InviteBleScreen(
             Text("Error: $error", color = MaterialTheme.colorScheme.error)
             Spacer(modifier = Modifier.height(16.dp))
             Button(onClick = onBack) { Text("Back") }
+        } else if (localOfferSdp == null) {
+            CircularProgressIndicator()
+            Text("Preparing Offer...")
         } else {
             CircularProgressIndicator()
             Spacer(modifier = Modifier.height(24.dp))
+            Text("Room: ${if (roomCode.isEmpty()) "Open" else roomCode}", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
             Text("Broadcasting via Bluetooth...", style = MaterialTheme.typography.titleMedium)
             Text("Nearby partners can now find you.", style = MaterialTheme.typography.bodySmall)
             Spacer(modifier = Modifier.height(48.dp))
@@ -73,6 +99,7 @@ fun InviteBleScreen(
 @Composable
 fun JoinBleScreen(
     discoveryManager: DiscoveryManager,
+    roomCode: String,
     onPeerSelected: (PeerDiscovered) -> Unit,
     onBack: () -> Unit
 ) {
@@ -98,18 +125,31 @@ fun JoinBleScreen(
     }
 
     LaunchedEffect(peers) {
-        // Auto-select if only one Directo partner is found after 2 seconds
-        if (peers.size == 1 && !isConnecting) {
-            kotlinx.coroutines.delay(2000)
-            if (peers.size == 1 && !isConnecting) {
-                isConnecting = true
-                onPeerSelected(peers.first())
+        // Auto-select logic based on Room Code
+        if (peers.isNotEmpty() && !isConnecting) {
+            val matchingPeer = if (roomCode.isNotEmpty()) {
+                // Strictly match the Room Code found in BLE Service Data
+                peers.firstOrNull { it.roomCode.equals(roomCode, ignoreCase = true) } 
+            } else {
+                // If Open, only auto connect if there's exactly one peer nearby
+                if (peers.size == 1) peers.first() else null
+            }
+
+            matchingPeer?.let {
+                kotlinx.coroutines.delay(500) // Small delay for UX
+                if (!isConnecting) {
+                    isConnecting = true
+                    onPeerSelected(it)
+                }
             }
         }
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text("Join Partner", style = MaterialTheme.typography.headlineSmall)
+        if (roomCode.isNotEmpty()) {
+            Text("Searching for Room: $roomCode", color = MaterialTheme.colorScheme.primary)
+        }
         
         Spacer(modifier = Modifier.height(32.dp))
         
@@ -130,12 +170,17 @@ fun JoinBleScreen(
             items(peers.toList()) { peer ->
                 Card(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                    onClick = { onPeerSelected(peer) }
+                    onClick = { 
+                        if (!isConnecting) {
+                            isConnecting = true
+                            onPeerSelected(peer)
+                        }
+                    }
                 ) {
                     ListItem(
                         headlineContent = { Text(peer.name) },
                         supportingContent = { Text("Signal: ${peer.rssi} dBm") },
-                        trailingContent = { Icon(androidx.compose.material.icons.Icons.Default.ArrowForward, null) }
+                        trailingContent = { Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowForward, null) }
                     )
                 }
             }

@@ -111,15 +111,15 @@ class WebRtcSessionManager {
     private suspend fun PeerConnection.waitForIceGathering() {
         if (iceGatheringState == IceGatheringState.Complete) return
         
-        // Fallback: Wait for gathering to reach completion or timeout
-        // Since the exact Flow property name is elusive in this environment, 
-        // a polling loop is a safe and robust alternative for P2P signaling.
+        // Wait up to 2 seconds for ICE gathering
         var attempts = 0
-        while (iceGatheringState != IceGatheringState.Complete && attempts < 50) {
+        while (iceGatheringState != IceGatheringState.Complete && attempts < 20) {
             delay(100)
             attempts++
+            // If we already have a few candidates (Host + SRFLX), 1 second is enough to proceed
+            if (attempts > 10 && _iceCandidates.value.size >= 2) break
         }
-        Logger.d { "ICE Gathering finished with state: $iceGatheringState after ${attempts * 100}ms" }
+        Logger.d { "ICE Gathering finished/timed out after ${attempts * 100}ms. Candidates: ${_iceCandidates.value.size}" }
     }
 
     suspend fun createOffer(): String? {

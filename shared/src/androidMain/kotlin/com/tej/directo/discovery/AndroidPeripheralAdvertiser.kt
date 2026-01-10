@@ -25,7 +25,7 @@ class AndroidPeripheralAdvertiser(
     // Buffer for long writes
     private val writeBuffer = mutableMapOf<String, ByteArray>()
 
-    override suspend fun startAdvertising(serviceUuid: String, sdpPayload: String) {
+    override suspend fun startAdvertising(roomCode: String, serviceUuid: String, sdpPayload: String) {
         if (!bluetoothAdapter.isEnabled) throw IllegalStateException("Bluetooth Off")
 
         // 1. Setup GATT Server to host the SDP
@@ -108,16 +108,22 @@ class AndroidPeripheralAdvertiser(
         val settings = AdvertiseSettings.Builder()
             .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
             .setConnectable(true)
+            .setTimeout(0)
             .build()
 
         val data = AdvertiseData.Builder()
+            .setIncludeDeviceName(false)
+            .setIncludeTxPowerLevel(false)
             .addServiceUuid(ParcelUuid(SERVICE_UUID))
-            .setIncludeDeviceName(true)
             .build()
 
-        bluetoothAdapter.bluetoothLeAdvertiser?.startAdvertising(settings, data, object : AdvertiseCallback() {
+        val scanResponse = AdvertiseData.Builder()
+            .addServiceData(ParcelUuid(SERVICE_UUID), roomCode.toByteArray())
+            .build()
+
+        bluetoothAdapter.bluetoothLeAdvertiser?.startAdvertising(settings, data, scanResponse, object : AdvertiseCallback() {
             override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
-                Logger.d { "BLE Advertising Started with GATT Server" }
+                Logger.d { "BLE Advertising Started for Room: $roomCode" }
             }
             override fun onStartFailure(errorCode: Int) {
                 Logger.e { "BLE Advertising Failed: $errorCode" }

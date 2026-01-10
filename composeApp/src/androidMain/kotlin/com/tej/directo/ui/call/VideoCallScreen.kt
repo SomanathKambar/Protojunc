@@ -24,8 +24,9 @@ import com.tej.directo.discovery.PeerDiscovered
 fun VideoCallScreen(
     sessionManager: WebRtcSessionManager,
     viewModel: ConnectionViewModel,
-    discoveryManager: DiscoveryManager? = null,
-    selectedPeer: PeerDiscovered? = null,
+    discoveryManager: DiscoveryManager,
+    isHost: Boolean,
+    roomCode: String,
     onEndCall: () -> Unit
 ) {
     val remoteTrack by sessionManager.remoteVideoTrack.collectAsState()
@@ -33,18 +34,48 @@ fun VideoCallScreen(
     val connectionState by sessionManager.connectionState.collectAsState()
     val progressMessage by sessionManager.progressMessage.collectAsState()
     val handshakeStage by viewModel.handshakeStage.collectAsState()
+    val localSdp by viewModel.localSdp.collectAsState()
 
-    // Trigger Handshake if needed
-    LaunchedEffect(selectedPeer) {
-        if (selectedPeer != null && discoveryManager != null && handshakeStage == HandshakeStage.IDLE) {
-            viewModel.initiateBleHandshake(discoveryManager, selectedPeer) {
-                // Handshake ready, WebRTC will take over
+    // Production RCA: Handle automated handshake based on role
+    LaunchedEffect(Unit) {
+        if (isHost) {
+            // INVITER FLOW
+            viewModel.prepareInvite {
+                // localSdp is now ready, start broadcasting
+            }
+        } else {
+            // JOINER FLOW - OPEN JOIN MODE
+            // We connect to the FIRST Directo device we see for maximum speed
+            discoveryManager.observeNearbyPeers().collect { peer ->
+                // Skip room check for 'Open Connect' type behavior
+                viewModel.initiateBleHandshake(discoveryManager, peer) {
+                    // Linked
+                }
+            }
+        }
+    }
+
+    // Auto-broadcast if we are host and offer is ready
+    LaunchedEffect(localSdp) {
+        if (isHost && localSdp != null) {
+            try {
+                // Use roomCode for advertising, but Joiner will ignore it for speed
+                discoveryManager.startAdvertising(roomCode, localSdp!!)
+                
+                // Host listens for the Answer
+                discoveryManager.observeMessages().collect { answer ->
+                    viewModel.handleAnswerScanned(answer) {
+                        // Handshake complete
+                    }
+                }
+            } catch (e: Exception) {
+                // Handle advertising failure
             }
         }
     }
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-        // ... (existing Video Views)
+        // ... (rest of the Video views remain same)
         if (remoteTrack != null) {
             WebRtcVideoView(
                 videoTrack = remoteTrack,
@@ -55,17 +86,18 @@ fun VideoCallScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     CircularProgressIndicator(color = Color.White)
                     Spacer(modifier = Modifier.height(16.dp))
-                    val loadingText = if (selectedPeer != null && handshakeStage != HandshakeStage.COMPLETED) {
-                        "Handshake: ${handshakeStage.name.replace("_", " ")}"
+                    val loadingText = if (isHost) {
+                        if (localSdp == null) "Starting session..." else "Waiting for partner to join..."
                     } else {
-                        progressMessage ?: "Waiting for remote video..."
+                        if (handshakeStage == HandshakeStage.IDLE) "Connecting to partner..."
+                        else "Joining: ${handshakeStage.name.replace("_", " ")}"
                     }
                     Text(loadingText, color = Color.LightGray)
                 }
             }
         }
 
-        // Local Preview (Small Box)
+        // Local Preview (Small Box) - Shown immediately
         Surface(
             modifier = Modifier
                 .size(120.dp, 180.dp)
@@ -114,7 +146,7 @@ fun VideoCallScreen(
                 
                 Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                val statusText = if (selectedPeer != null && handshakeStage != HandshakeStage.COMPLETED && handshakeStage != HandshakeStage.FAILED) {
+                val statusText = if (handshakeStage != HandshakeStage.IDLE && handshakeStage != HandshakeStage.COMPLETED && handshakeStage != HandshakeStage.FAILED) {
                     "Stage: ${handshakeStage.name}"
                 } else {
                     progressMessage ?: connectionState.name

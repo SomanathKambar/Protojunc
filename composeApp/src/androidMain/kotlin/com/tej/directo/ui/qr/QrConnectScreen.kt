@@ -56,8 +56,21 @@ fun InviteQrScreen(
         } else if (step == 1) {
             Text("1. Show this to your partner", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(24.dp))
-            val qrBitmap = remember(localOfferSdp) { QrUtils.generateQrCode(localOfferSdp) }
-            Image(bitmap = qrBitmap.asImageBitmap(), contentDescription = "Offer QR", modifier = Modifier.size(300.dp))
+            val qrBitmap = remember(localOfferSdp) { QrUtils.generateQrCode(localOfferSdp!!) }
+            if (qrBitmap != null) {
+                Image(bitmap = qrBitmap.asImageBitmap(), contentDescription = "Offer QR", modifier = Modifier.size(300.dp))
+            } else {
+                Card(modifier = Modifier.size(300.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                    Column(Modifier.fillMaxSize().padding(16.dp), Arrangement.Center, Alignment.CenterHorizontally) {
+                        Text("Code too large for QR", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.error)
+                        Spacer(Modifier.height(16.dp))
+                        val clipboard = LocalClipboardManager.current
+                        Button(onClick = { clipboard.setText(AnnotatedString(localOfferSdp!!)) }) {
+                            Text("Copy Code Instead")
+                        }
+                    }
+                }
+            }
             Spacer(modifier = Modifier.height(32.dp))
             Button(onClick = { step = 2 }) { Text("Done, now SCAN partner's Answer") }
         } else {
@@ -118,7 +131,20 @@ fun JoinQrScreen(
             Text("2. Show this Answer to partner", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(24.dp))
             val qrBitmap = remember(localAnswerSdp) { QrUtils.generateQrCode(localAnswerSdp) }
-            Image(bitmap = qrBitmap.asImageBitmap(), contentDescription = "Answer QR", modifier = Modifier.size(300.dp))
+            if (qrBitmap != null) {
+                Image(bitmap = qrBitmap.asImageBitmap(), contentDescription = "Answer QR", modifier = Modifier.size(300.dp))
+            } else {
+                Card(modifier = Modifier.size(300.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                    Column(Modifier.fillMaxSize().padding(16.dp), Arrangement.Center, Alignment.CenterHorizontally) {
+                        Text("Code too large for QR", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.error)
+                        Spacer(Modifier.height(16.dp))
+                        val clipboard = LocalClipboardManager.current
+                        Button(onClick = { clipboard.setText(AnnotatedString(localAnswerSdp ?: "")) }) {
+                            Text("Copy Answer Instead")
+                        }
+                    }
+                }
+            }
             Spacer(modifier = Modifier.height(32.dp))
             Button(onClick = onComplete) { Text("I've shown it, Connect!") }
             Spacer(modifier = Modifier.height(16.dp))

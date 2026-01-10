@@ -32,9 +32,7 @@ import com.tej.directo.ui.bluetooth.InviteBleScreen
 import com.tej.directo.ui.bluetooth.JoinBleScreen
 import com.shepeliev.webrtckmp.SessionDescriptionType
 import kotlinx.coroutines.launch
-
 import androidx.compose.ui.input.pointer.pointerInput
-
 import com.tej.directo.discovery.PeerDiscovered
 import com.tej.directo.discovery.AndroidPeripheralAdvertiser
 import com.tej.directo.discovery.KableDiscoveryManager
@@ -58,6 +56,7 @@ fun App() {
     var pendingNavigation by remember { mutableStateOf<Screen?>(null) }
     var pendingBluetoothAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     
+    var roomCode by remember { mutableStateOf("APPLE") }
     var selectedPeer by remember { mutableStateOf<PeerDiscovered?>(null) }
     val advertiser = remember {
         val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
@@ -158,19 +157,15 @@ fun App() {
                         HomeScreen(
                             onNavigateToInvite = { 
                                 if (!isNavigating) {
-                                    pendingNavigation = Screen.InviteSelection
                                     checkPermissions {
-                                        navController.navigate(Screen.InviteSelection.name)
-                                        pendingNavigation = null
+                                        navController.navigate(Screen.VideoCall.name + "?host=true")
                                     }
                                 }
                             },
                             onNavigateToJoin = { 
                                 if (!isNavigating) {
-                                    pendingNavigation = Screen.JoinSelection
                                     checkPermissions {
-                                        navController.navigate(Screen.JoinSelection.name)
-                                        pendingNavigation = null
+                                        navController.navigate(Screen.VideoCall.name + "?host=false")
                                     }
                                 }
                             },
@@ -181,6 +176,8 @@ fun App() {
                     composable(Screen.InviteSelection.name) {
                         SelectionScreen(
                             title = "Invite Partner",
+                            roomCode = roomCode,
+                            onRoomCodeChange = { roomCode = it },
                             onQr = {
                                 if (!isNavigating) {
                                     isNavigating = true
@@ -210,6 +207,8 @@ fun App() {
                     composable(Screen.JoinSelection.name) {
                         SelectionScreen(
                             title = "Join Partner",
+                            roomCode = roomCode,
+                            onRoomCodeChange = { roomCode = it },
                             onQr = { 
                                 navController.navigate(Screen.JoinQr.name) 
                             },
@@ -260,47 +259,61 @@ fun App() {
                         )
                     }
                     
-                                    composable(Screen.VideoCall.name) {
-                                        VideoCallScreen(
-                                            sessionManager = viewModel.sessionManager,
-                                            viewModel = viewModel,
-                                            discoveryManager = discoveryManager,
-                                            selectedPeer = selectedPeer,
-                                            onEndCall = { 
-                                                selectedPeer = null
-                                                viewModel.endCall()
-                                                navController.popBackStack(Screen.Home.name, false) 
-                                            }
-                                        )
-                                    }
-                    
-                                    composable(Screen.InviteBle.name) {
-                                        InviteBleScreen(
-                                            onAnswerReceived = { answer ->
-                                                viewModel.handleAnswerScanned(answer) {
-                                                    navController.navigate(Screen.VideoCall.name)
-                                                }
-                                            },
-                                            onBack = { 
-                                                viewModel.cancel()
-                                                navController.popBackStack() 
-                                            }
-                                        )
-                                    }
-                    
-                                    composable(Screen.JoinBle.name) {
-                                         JoinBleScreen(
-                                             discoveryManager = discoveryManager,
-                                             onPeerSelected = { peer ->
-                                                 selectedPeer = peer
-                                                 navController.navigate(Screen.VideoCall.name)
-                                             },
-                                             onBack = { 
-                                                 viewModel.cancel()
-                                                 navController.popBackStack() 
-                                             }
-                                         )
-                                    }                }
+                    composable(
+                        route = Screen.VideoCall.name + "?host={isHost}",
+                        arguments = listOf(
+                            androidx.navigation.navArgument("isHost") {
+                                type = androidx.navigation.NavType.BoolType
+                                defaultValue = false
+                            }
+                        )
+                    ) { backStackEntry ->
+                        val isHost = backStackEntry.arguments?.getBoolean("isHost") ?: false
+                        VideoCallScreen(
+                            sessionManager = viewModel.sessionManager,
+                            viewModel = viewModel,
+                            discoveryManager = discoveryManager,
+                            isHost = isHost,
+                            roomCode = roomCode,
+                            onEndCall = { 
+                                selectedPeer = null
+                                viewModel.endCall()
+                                navController.popBackStack(Screen.Home.name, false) 
+                            }
+                        )
+                    }
+
+                    composable(Screen.InviteBle.name) {
+                        InviteBleScreen(
+                            localOfferSdp = localSdp,
+                            roomCode = roomCode,
+                            onAnswerReceived = { answer ->
+                                viewModel.handleAnswerScanned(answer) {
+                                    navController.navigate(Screen.VideoCall.name)
+                                }
+                            },
+                            onBack = { 
+                                viewModel.cancel()
+                                navController.popBackStack() 
+                            }
+                        )
+                    }
+
+                    composable(Screen.JoinBle.name) {
+                         JoinBleScreen(
+                             discoveryManager = discoveryManager,
+                             roomCode = roomCode,
+                             onPeerSelected = { peer ->
+                                 selectedPeer = peer
+                                 navController.navigate(Screen.VideoCall.name)
+                             },
+                             onBack = { 
+                                 viewModel.cancel()
+                                 navController.popBackStack() 
+                             }
+                         )
+                    }
+                }
 
                 if (isInitializing || isProcessing || isNavigating) {
                     Surface(
@@ -341,9 +354,29 @@ fun App() {
 }
 
 @Composable
-fun SelectionScreen(title: String, onQr: () -> Unit, onBle: () -> Unit, onBack: () -> Unit, processing: Boolean = false) {
+fun SelectionScreen(
+    title: String, 
+    roomCode: String,
+    onRoomCodeChange: (String) -> Unit,
+    onQr: () -> Unit, 
+    onBle: () -> Unit, 
+    onBack: () -> Unit, 
+    processing: Boolean = false
+) {
     Column(modifier = Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(title, style = MaterialTheme.typography.headlineMedium)
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        OutlinedTextField(
+            value = roomCode,
+            onValueChange = { if (it.length <= 5) onRoomCodeChange(it.uppercase()) },
+            label = { Text("Room Code (Optional 5-chars)") },
+            placeholder = { Text("e.g. APPLE") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            enabled = !processing
+        )
+        
         Spacer(modifier = Modifier.height(32.dp))
         Button(
             onClick = { if (!processing) onQr() }, 

@@ -5,43 +5,53 @@ import com.tej.directo.models.IceCandidateModel
 
 object SdpMinifier {
     
+    private val TOKENS = mapOf(
+        "a=candidate:" to "§C",
+        "a=fingerprint:sha-256 " to "§F",
+        "a=setup:" to "§S",
+        "a=mid:" to "§M",
+        "a=ice-ufrag:" to "§U",
+        "a=ice-pwd:" to "§P",
+        "a=rtpmap:" to "§R",
+        "a=fmtp:" to "§T",
+        "a=ssrc:" to "§X",
+        "IN IP4 " to "§I",
+        " UDP/TLS/RTP/SAVPF " to "§B"
+    )
+
     /**
      * Reduces the size of the SDP by removing redundant lines and codecs.
      */
     fun minify(sdp: String): String {
-        val lines = sdp.split("\n", "\r")
+        val lines = sdp.split("\n", "\r").filter { it.isNotBlank() }
         val minifiedLines = mutableListOf<String>()
         
-        // Ensure standard headers are present (WebRTC native requirement)
-        var hasV = false
-        var hasO = false
-        var hasS = false
-        var hasT = false
-        var hasC = false
-
         var keepCandidateCount = 0
-        val maxCandidates = 1 
+        val maxCandidates = 3
         
+        val keptPayloads = setOf("111", "96", "97")
+
         for (line in lines) {
             val trimmed = line.trim()
-            if (trimmed.isEmpty()) continue
             
             val shouldKeep = when {
-                trimmed.startsWith("v=") -> { hasV = true; true }
-                trimmed.startsWith("o=") -> { hasO = true; true }
-                trimmed.startsWith("s=") -> { hasS = true; true }
-                trimmed.startsWith("t=") -> { hasT = true; true }
-                trimmed.startsWith("c=") -> { hasC = true; true }
+                trimmed.startsWith("v=") || trimmed.startsWith("o=") || 
+                trimmed.startsWith("s=") || trimmed.startsWith("t=") ||
+                trimmed.startsWith("c=") -> true
+                
                 trimmed.startsWith("m=") -> true
-                trimmed.startsWith("a=fingerprint:") -> true
-                trimmed.startsWith("a=setup:") -> true
-                trimmed.startsWith("a=mid:") -> true
-                trimmed.startsWith("a=group:BUNDLE") -> true
-                trimmed.startsWith("a=msid-semantic:") -> true
-                trimmed.startsWith("a=ice-ufrag:") -> true
-                trimmed.startsWith("a=ice-pwd:") -> true
-                trimmed.startsWith("a=rtpmap:") -> true 
-                trimmed.startsWith("a=fmtp:") -> true
+                
+                trimmed.startsWith("a=fingerprint:") || trimmed.startsWith("a=setup:") ||
+                trimmed.startsWith("a=mid:") || trimmed.startsWith("a=group:BUNDLE") ||
+                trimmed.startsWith("a=ice-ufrag:") || trimmed.startsWith("a=ice-pwd:") ||
+                trimmed.startsWith("a=rtcp-mux") || trimmed.startsWith("a=msid-semantic:") -> true
+                
+                trimmed.startsWith("a=rtpmap:111") || trimmed.startsWith("a=fmtp:111") -> true
+                trimmed.startsWith("a=rtpmap:96") || trimmed.startsWith("a=fmtp:96") -> true
+                trimmed.startsWith("a=rtpmap:97") || trimmed.startsWith("a=fmtp:97") -> true
+                
+                trimmed.startsWith("a=ssrc:") || trimmed.startsWith("a=msid:") -> true
+                
                 trimmed.startsWith("a=candidate:") -> {
                     if (keepCandidateCount < maxCandidates) {
                         keepCandidateCount++
@@ -52,24 +62,49 @@ object SdpMinifier {
             }
             
             if (shouldKeep) {
-                minifiedLines.add(trimmed)
+                var processedLine = if (trimmed.startsWith("m=")) {
+                    sanitizeMLine(trimmed, keptPayloads)
+                } else {
+                    trimmed
+                }
+                
+                // Token replacement to save more space
+                for ((key, value) in TOKENS) {
+                    processedLine = processedLine.replace(key, value)
+                }
+                
+                minifiedLines.add(processedLine)
             }
         }
         
-        // Inject missing standard headers if they were stripped
-        if (!hasV) minifiedLines.add(0, "v=0")
-        if (!hasT) minifiedLines.add("t=0 0")
-        if (!hasS) minifiedLines.add("s=-")
-        if (!hasC) minifiedLines.add("c=IN IP4 0.0.0.0")
-        
-        // IMPORTANT: WebRTC requires CRLF (\r\n)
-        return minifiedLines.joinToString("\r\n")
+        return minifiedLines.joinToString("\r\n") + "\r\n"
     }
 
-    private fun isEssentialCodec(line: String): Boolean {
-        val l = line.lowercase()
-        // Keep only one audio (Opus) and one video (VP8) to save massive space
-        return l.contains("opus/48000/2") || l.contains("vp8/90000")
+    private fun sanitizeMLine(line: String, keptPayloads: Set<String>): String {
+        val parts = line.split(" ")
+        if (parts.size < 4) return line
+        
+        val newParts = mutableListOf<String>()
+        newParts.add(parts[0]) // m=audio
+        newParts.add(parts[1]) // port
+        newParts.add(parts[2]) // proto
+        
+        for (i in 3 until parts.size) {
+            if (keptPayloads.contains(parts[i])) {
+                newParts.add(parts[i])
+            }
+        }
+        
+        if (newParts.size == 3) newParts.add(parts[3])
+        return newParts.joinToString(" ")
+    }
+
+    private fun expand(minifiedSdp: String): String {
+        var result = minifiedSdp
+        for ((key, value) in TOKENS) {
+            result = result.replace(value, key)
+        }
+        return result
     }
 
     /**
@@ -80,8 +115,8 @@ object SdpMinifier {
         val payload = SignalingPayload(
             sdp = minified,
             type = type,
-            iceCandidates = emptyList(), // Candidates are already in the SDP
-            timestamp = 0 // Not strictly needed for P2P
+            iceCandidates = emptyList(),
+            timestamp = 0
         )
         return SignalingEncoder.encode(payload)
     }
@@ -90,7 +125,11 @@ object SdpMinifier {
      * Decodes an encoded SignalingPayload string back into a raw SDP.
      */
     fun decodePayload(encoded: String): Pair<String, String> {
-        val payload = SignalingEncoder.decode(encoded)
-        return payload.sdp to payload.type
+        return try {
+            val payload = SignalingEncoder.decode(encoded)
+            expand(payload.sdp) to payload.type
+        } catch (e: Exception) {
+            "DECODE_ERROR" to "UNKNOWN"
+        }
     }
 }

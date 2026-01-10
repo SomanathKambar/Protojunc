@@ -140,6 +140,7 @@ class ConnectionViewModel : ViewModel() {
         _isInitializing.value = true
         viewModelScope.launch {
             try {
+                Logger.d { "Handshake Diagnostic (Offer): Received ${encodedOffer.length} chars. Preview: ${encodedOffer.take(15)}..." }
                 val (offerSdp, _) = SdpMinifier.decodePayload(encodedOffer)
                 if (offerSdp == "DECODE_ERROR") throw IllegalStateException("Invalid QR/Manual Code")
                 
@@ -152,6 +153,7 @@ class ConnectionViewModel : ViewModel() {
                 _isInitializing.value = false
             } catch (e: Exception) {
                 _isInitializing.value = false
+                Logger.e(e) { "Offer Processing RCA Failure" }
                 _viewModelError.value = "Handshake Error: ${e.message}"
             }
         }
@@ -162,6 +164,7 @@ class ConnectionViewModel : ViewModel() {
         _isProcessing.value = true
         viewModelScope.launch {
             try {
+                Logger.d { "Handshake Diagnostic (Answer): Received ${encodedAnswer.length} chars. Preview: ${encodedAnswer.take(15)}..." }
                 val (answerSdp, _) = SdpMinifier.decodePayload(encodedAnswer)
                 if (answerSdp == "DECODE_ERROR") throw IllegalStateException("Invalid Answer Code")
                 
@@ -170,6 +173,7 @@ class ConnectionViewModel : ViewModel() {
                 onConnected()
             } catch (e: Exception) {
                 _isProcessing.value = false
+                Logger.e(e) { "Answer Processing RCA Failure" }
                 _viewModelError.value = "Connection Error: ${e.message}"
             }
         }

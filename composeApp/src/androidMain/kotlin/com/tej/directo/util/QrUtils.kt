@@ -12,20 +12,25 @@ import java.util.EnumMap
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 
 object QrUtils {
-    fun generateQrCode(text: String, size: Int = 512): Bitmap {
-        val hints = mutableMapOf<EncodeHintType, Any>()
-        hints[EncodeHintType.ERROR_CORRECTION] = ErrorCorrectionLevel.L
-        hints[EncodeHintType.MARGIN] = 1
-        
-        val writer = QRCodeWriter()
-        val bitMatrix = writer.encode(text, BarcodeFormat.QR_CODE, size, size, hints)
-        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.RGB_565)
-        for (x in 0 until size) {
-            for (y in 0 until size) {
-                bitmap.setPixel(x, y, if (bitMatrix[x, y]) Color.BLACK else Color.WHITE)
+    fun generateQrCode(text: String, size: Int = 512): Bitmap? {
+        return try {
+            val hints = mutableMapOf<EncodeHintType, Any>()
+            hints[EncodeHintType.ERROR_CORRECTION] = ErrorCorrectionLevel.L
+            hints[EncodeHintType.MARGIN] = 1
+            
+            val writer = QRCodeWriter()
+            val bitMatrix = writer.encode(text, BarcodeFormat.QR_CODE, size, size, hints)
+            val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.RGB_565)
+            for (x in 0 until size) {
+                for (y in 0 until size) {
+                    bitmap.setPixel(x, y, if (bitMatrix[x, y]) Color.BLACK else Color.WHITE)
+                }
             }
+            bitmap
+        } catch (e: Exception) {
+            // Data too big or encoding error
+            null
         }
-        return bitmap
     }
 }
 
