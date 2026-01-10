@@ -39,16 +39,15 @@ class AndroidPeripheralAdvertiser(
             ) {
                 val fullData = sdpPayload.toByteArray()
                 
+                // Add explicit markers for start/end if not already handled
+                // Or rely on MTU-aware chunking
                 if (offset >= fullData.size) {
-                     // Offset out of bounds, send success with empty data to signal end
                      gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, null)
                      return
                 }
                 
-                // Android's sendResponse has a limit (usually ~512 bytes). 
-                // We provide the slice from the offset to the end. 
-                // The underlying Bluetooth stack handles the MTU-sized chunking.
-                val chunk = fullData.copyOfRange(offset, fullData.size)
+                val length = minOf(fullData.size - offset, 500) // Stay well within standard 512 limit
+                val chunk = fullData.copyOfRange(offset, offset + length)
                 gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, chunk)
             }
 

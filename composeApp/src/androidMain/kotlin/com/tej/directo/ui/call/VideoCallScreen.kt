@@ -20,6 +20,9 @@ import com.tej.directo.webrtc.HandshakeStage
 import com.tej.directo.discovery.DiscoveryManager
 import com.tej.directo.discovery.PeerDiscovered
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
+import co.touchlab.kermit.Logger
 
 @Composable
 fun VideoCallScreen(
@@ -42,9 +45,12 @@ fun VideoCallScreen(
 
     // Production RCA: Handle automated handshake based on role
     LaunchedEffect(isHost) {
-        // 1. OPEN CAMERA IMMEDIATELY for everyone - This fulfills "atleast user selfie camera turn on"
+        // 1. OPEN CAMERA IMMEDIATELY for everyone
         sessionManager.createPeerConnection()
         
+        // Wait for PeerConnection to reach Ready state before proceeding
+        sessionManager.connectionState.filter { it == WebRtcState.Ready }.first()
+
         // 2. TRIGGER HANDSHAKE with Bluetooth Check
         checkAndRequestBluetooth {
             if (isHost) {
@@ -59,6 +65,7 @@ fun VideoCallScreen(
                     discoveryManager.observeNearbyPeers().collect { peer ->
                         if (!alreadyConnecting && (roomCode.isEmpty() || peer.roomCode.equals(roomCode, ignoreCase = true))) {
                             alreadyConnecting = true
+                            Logger.d { "Found host ${peer.name} for room $roomCode. Initiating handshake..." }
                             viewModel.initiateBleHandshake(discoveryManager, peer) {
                                 // Handshake success
                             }
@@ -164,10 +171,10 @@ fun VideoCallScreen(
                 
                 Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                val statusText = if (handshakeStage != HandshakeStage.IDLE && handshakeStage != HandshakeStage.COMPLETED && handshakeStage != HandshakeStage.FAILED) {
-                    "Stage: ${handshakeStage.name}"
-                } else {
-                    progressMessage ?: connectionState.name
+                val statusText = when {
+                    handshakeStage != HandshakeStage.IDLE && handshakeStage != HandshakeStage.COMPLETED && handshakeStage != HandshakeStage.FAILED -> "Handshake: ${handshakeStage.name}"
+                    connectionState != WebRtcState.Idle -> "WebRTC: ${connectionState.name}"
+                    else -> progressMessage ?: "Initializing..."
                 }
                 Text(
                     text = statusText,

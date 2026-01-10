@@ -52,16 +52,22 @@ class WebRtcSessionManager {
             // Initialize Camera & Mic
             _progressMessage.value = "Starting Media..."
             try {
-                Logger.d { "Requesting User Media..." }
+                Logger.d { "Requesting User Media (Selfie)..." }
                 val stream = MediaDevices.getUserMedia(audio = true, video = true)
                 Logger.d { "Media Stream obtained. Tracks: ${stream.audioTracks.size} audio, ${stream.videoTracks.size} video" }
                 
+                // Set local video track immediately for preview
+                val videoTrack = stream.videoTracks.firstOrNull()
+                if (videoTrack != null) {
+                    localVideoTrack.value = videoTrack
+                    Logger.d { "Local video track set: ${videoTrack.id}" }
+                }
+
                 stream.audioTracks.forEach { track -> 
                     pc.addTrack(track, stream) 
                 }
                 stream.videoTracks.forEach { track ->
                     pc.addTrack(track, stream)
-                    localVideoTrack.value = track
                 }
                 
                 if (stream.videoTracks.isEmpty()) {
