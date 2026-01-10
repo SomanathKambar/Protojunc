@@ -8,18 +8,18 @@ import org.webrtc.RendererCommon
 import org.webrtc.SurfaceViewRenderer
 import org.webrtc.EglBase
 
+private val eglBase: EglBase by lazy { EglBase.create() }
+
 @Composable
 fun WebRtcVideoView(
     videoTrack: VideoTrack?,
     modifier: Modifier = Modifier,
     mirror: Boolean = false
 ) {
-    val eglBaseContext = remember { EglBase.create().eglBaseContext }
-    
     AndroidView(
         factory = { context ->
             SurfaceViewRenderer(context).apply {
-                init(eglBaseContext, null)
+                init(eglBase.eglBaseContext, null)
                 setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
                 setMirror(mirror)
             }

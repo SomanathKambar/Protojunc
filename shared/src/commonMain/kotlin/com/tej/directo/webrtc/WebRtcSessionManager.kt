@@ -51,24 +51,37 @@ class WebRtcSessionManager {
 
             // Initialize Camera & Mic
             _progressMessage.value = "Starting Media..."
-            val stream = MediaDevices.getUserMedia(audio = true, video = true)
-            stream.audioTracks.forEach { track -> pc.addTrack(track, stream) }
-            stream.videoTracks.forEach { track ->
-                pc.addTrack(track, stream)
-                localVideoTrack.value = track
+            try {
+                val stream = MediaDevices.getUserMedia(audio = true, video = true)
+                Logger.d { "Media Stream obtained: ${stream.id}. Tracks: ${stream.audioTracks.size} audio, ${stream.videoTracks.size} video" }
+                
+                stream.audioTracks.forEach { track -> 
+                    Logger.d { "Adding audio track: ${track.id}" }
+                    pc.addTrack(track, stream) 
+                }
+                stream.videoTracks.forEach { track ->
+                    Logger.d { "Adding video track: ${track.id}" }
+                    pc.addTrack(track, stream)
+                    localVideoTrack.value = track
+                }
+            } catch (mediaError: Exception) {
+                Logger.e(mediaError) { "Failed to get user media" }
+                _errorMessage.value = "Camera Error: ${mediaError.message}"
+                // Don't throw yet, try to continue with connection if possible, or fail gracefully
             }
 
-            scope.launch {
-                pc.onIceCandidate.collect { candidate ->
+            pc.onIceCandidate
+                .onEach { candidate ->
                     _iceCandidates.value = _iceCandidates.value + candidate
                     Logger.d { "New ICE Candidate received" }
                 }
-            }
+                .launchIn(scope)
 
-            scope.launch {
-                pc.onConnectionStateChange.collect { state ->
-                    Logger.d { "Connection State Change: $state" }
+            pc.onConnectionStateChange
+                .onEach { state ->
+                    Logger.d { "PeerConnection State Change: $state" }
                     _connectionState.value = when(state) {
+                        PeerConnectionState.New -> WebRtcState.Ready
                         PeerConnectionState.Connecting -> {
                             _progressMessage.value = "Connecting..."
                             WebRtcState.Connecting
@@ -82,22 +95,24 @@ class WebRtcSessionManager {
                             WebRtcState.Failed
                         }
                         PeerConnectionState.Disconnected -> {
+                            _errorMessage.value = "Disconnected"
                             WebRtcState.Failed
                         }
+                        PeerConnectionState.Closed -> WebRtcState.Closed
                         else -> _connectionState.value
                     }
                 }
-            }
+                .launchIn(scope)
 
-            scope.launch {
-                pc.onTrack.collect { event ->
+            pc.onTrack
+                .onEach { event ->
                     val track = event.track
-                    Logger.d { "Received Remote Track: ${track?.kind}" }
+                    Logger.d { "Received Remote Track: ${track?.kind} id: ${track?.id}" }
                     if (track is VideoTrack) {
                         remoteVideoTrack.value = track
                     }
                 }
-            }
+                .launchIn(scope)
             
             _progressMessage.value = "Ready"
             _connectionState.value = WebRtcState.Ready

@@ -37,19 +37,24 @@ fun VideoCallScreen(
     val localSdp by viewModel.localSdp.collectAsState()
 
     // Production RCA: Handle automated handshake based on role
-    LaunchedEffect(Unit) {
+    LaunchedEffect(isHost) {
+        // Open Camera immediately for everyone
+        sessionManager.createPeerConnection()
+        
         if (isHost) {
-            // INVITER FLOW
+            // HOST: Generate offer and start advertising
             viewModel.prepareInvite {
-                // localSdp is now ready, start broadcasting
+                // localSdp is now ready, advertising starts in the other LaunchedEffect
             }
         } else {
-            // JOINER FLOW - OPEN JOIN MODE
-            // We connect to the FIRST Directo device we see for maximum speed
+            // JOINER: Scan for the host
+            var alreadyConnecting = false
             discoveryManager.observeNearbyPeers().collect { peer ->
-                // Skip room check for 'Open Connect' type behavior
-                viewModel.initiateBleHandshake(discoveryManager, peer) {
-                    // Linked
+                if (!alreadyConnecting && (roomCode.isEmpty() || peer.roomCode.equals(roomCode, ignoreCase = true))) {
+                    alreadyConnecting = true
+                    viewModel.initiateBleHandshake(discoveryManager, peer) {
+                        // Handshake success
+                    }
                 }
             }
         }
