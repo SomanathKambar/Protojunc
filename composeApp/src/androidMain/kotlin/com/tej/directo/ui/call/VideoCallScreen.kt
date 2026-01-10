@@ -25,6 +25,58 @@ import kotlinx.coroutines.flow.first
 import co.touchlab.kermit.Logger
 
 @Composable
+fun ProgressStepper(currentStage: HandshakeStage) {
+    val stages = listOf(
+        HandshakeStage.INITIALIZING_HARDWARE to "Hardware",
+        HandshakeStage.STARTING_DISCOVERY to "Discovery",
+        HandshakeStage.EXCHANGING_SDP_OFFER to "Handshake",
+        HandshakeStage.GATHERING_ICE_CANDIDATES to "Gathering",
+        HandshakeStage.LINK_ESTABLISHED to "Connecting"
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(24.dp)
+            .background(Color.Black.copy(alpha = 0.7f), MaterialTheme.shapes.large)
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        stages.forEachIndexed { index, (stage, label) ->
+            val isCompleted = currentStage.ordinal > stage.ordinal || currentStage == HandshakeStage.COMPLETED || currentStage == HandshakeStage.LINK_ESTABLISHED
+            val isCurrent = currentStage == stage
+            
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val circleColor = when {
+                    isCompleted -> Color.Green
+                    isCurrent -> Color.Yellow
+                    else -> Color.Gray
+                }
+                
+                Box(modifier = Modifier.size(12.dp).background(circleColor, androidx.compose.foundation.shape.CircleShape))
+                Spacer(modifier = Modifier.width(16.dp))
+                Text(
+                    text = label,
+                    color = if (isCurrent) Color.White else Color.LightGray,
+                    style = if (isCurrent) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodySmall
+                )
+                if (isCurrent) {
+                    Spacer(modifier = Modifier.weight(1f))
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
+                }
+            }
+            
+            if (index < stages.size - 1) {
+                Box(modifier = Modifier.width(2.dp).height(8.dp).background(Color.DarkGray).padding(start = 5.dp))
+            }
+        }
+    }
+}
+
+@Composable
 fun VideoCallScreen(
     sessionManager: WebRtcSessionManager,
     viewModel: ConnectionViewModel,
@@ -82,17 +134,14 @@ fun VideoCallScreen(
             checkAndRequestBluetooth {
                 coroutineScope.launch {
                     try {
-                        // Use roomCode for advertising, but Joiner will ignore it for speed
                         discoveryManager.startAdvertising(roomCode, localSdp!!)
-                        
-                        // Host listens for the Answer
                         discoveryManager.observeMessages().collect { answer ->
                             viewModel.handleAnswerScanned(answer) {
                                 // Handshake complete
                             }
                         }
                     } catch (e: Exception) {
-                        // Handle advertising failure
+                        Logger.e(e) { "Advertising failure" }
                     }
                 }
             }
@@ -100,7 +149,6 @@ fun VideoCallScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-        // ... (rest of the Video views remain same)
         if (remoteTrack != null) {
             WebRtcVideoView(
                 videoTrack = remoteTrack,
@@ -172,8 +220,10 @@ fun VideoCallScreen(
                 Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 val statusText = when {
-                    handshakeStage != HandshakeStage.IDLE && handshakeStage != HandshakeStage.COMPLETED && handshakeStage != HandshakeStage.FAILED -> "Handshake: ${handshakeStage.name}"
-                    connectionState != WebRtcState.Idle -> "WebRTC: ${connectionState.name}"
+                    handshakeStage != HandshakeStage.IDLE && handshakeStage != HandshakeStage.COMPLETED && handshakeStage != HandshakeStage.FAILED -> {
+                        "Stage: ${handshakeStage.name.lowercase().replace("_", " ").replaceFirstChar { it.uppercase() }}..."
+                    }
+                    connectionState != WebRtcState.Idle -> "Network: ${connectionState.name}"
                     else -> progressMessage ?: "Initializing..."
                 }
                 Text(
@@ -181,6 +231,18 @@ fun VideoCallScreen(
                     color = Color.White,
                     style = MaterialTheme.typography.labelLarge
                 )
+            }
+        }
+
+        // Detailed Progress Overlay (Intermittent State Tracker)
+        if (remoteTrack == null && connectionState != WebRtcState.Connected) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(bottom = 120.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                ProgressStepper(currentStage = handshakeStage)
             }
         }
 

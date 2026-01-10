@@ -57,18 +57,17 @@ class ConnectionViewModel : ViewModel() {
         
         viewModelScope.launch {
             try {
-                _handshakeStage.value = HandshakeStage.CONNECTING_TO_PEER
+                _handshakeStage.value = HandshakeStage.INITIALIZING_HARDWARE
                 sessionManager.createPeerConnection()
                 
-                _handshakeStage.value = HandshakeStage.READING_OFFER_PAYLOAD
+                _handshakeStage.value = HandshakeStage.STARTING_DISCOVERY
                 val encodedOffer = discoveryManager.connectToPeer(peer)
                 
                 if (encodedOffer.isEmpty()) {
                     throw IllegalStateException("Received 0 bytes from peer via BLE")
                 }
 
-                _handshakeStage.value = HandshakeStage.DECODING_SDP
-                // Diagnostic: Log data size
+                _handshakeStage.value = HandshakeStage.EXCHANGING_SDP_OFFER
                 co.touchlab.kermit.Logger.d { "Handshake Diagnostic: Received ${encodedOffer.length} chars via BLE. Content: ${encodedOffer.take(30)}..." }
                 
                 val (sdp, _) = SdpMinifier.decodePayload(encodedOffer)
@@ -77,26 +76,23 @@ class ConnectionViewModel : ViewModel() {
                     throw IllegalStateException("Decoded SDP is too short: $sdp")
                 }
 
-                _handshakeStage.value = HandshakeStage.SETTING_REMOTE_DESCRIPTION
+                _handshakeStage.value = HandshakeStage.EXCHANGING_SDP_ANSWER
                 sessionManager.handleRemoteDescription(sdp, SessionDescriptionType.Offer)
                 
-                _handshakeStage.value = HandshakeStage.GENERATING_ANSWER
                 val answer = sessionManager.createAnswer()
-                if (answer == null) throw IllegalStateException("Local Answer generation failed (SessionManager returned null)")
+                if (answer == null) throw IllegalStateException("Local Answer generation failed")
                 
                 val encodedAnswer = SdpMinifier.encodePayload(answer, "ANSWER")
                 _localSdp.value = encodedAnswer
 
-                _handshakeStage.value = HandshakeStage.WRITING_ANSWER
                 discoveryManager.writeToPeer(peer, encodedAnswer)
                 
-                _handshakeStage.value = HandshakeStage.COMPLETED
+                _handshakeStage.value = HandshakeStage.GATHERING_ICE_CANDIDATES
                 _isInitializing.value = false
                 onReady()
             } catch (e: Exception) {
                 _handshakeStage.value = HandshakeStage.FAILED
                 _isInitializing.value = false
-                // Log full stack trace for developer and show message to user
                 Logger.e(e) { "Handshake RCA Failure" }
                 _viewModelError.value = "Handshake Failed: ${e.message ?: "Unknown Error"}"
             }
