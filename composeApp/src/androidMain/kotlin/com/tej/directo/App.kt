@@ -383,6 +383,17 @@ fun SelectionScreen(
         ) { 
             Text("Via Bluetooth") 
         }
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(
+            onClick = { 
+                // Navigation to Online Call mode (for now we will reuse VideoCall with a flag)
+                onQr() // Placeholder, ideally a new callback
+            }, 
+            modifier = Modifier.fillMaxWidth().height(56.dp),
+            enabled = !processing
+        ) { 
+            Text("Via Online Server") 
+        }
         Spacer(modifier = Modifier.height(32.dp))
         TextButton(onClick = onBack, enabled = !processing) { Text("Back") }
     }

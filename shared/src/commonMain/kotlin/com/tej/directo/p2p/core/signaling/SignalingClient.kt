@@ -1,11 +1,9 @@
 package com.tej.directo.p2p.core.signaling
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.serialization.Serializable
 
-enum class SignalingState {
-    IDLE, CONNECTING, CONNECTED, DISCONNECTED, ERROR
-}
-
+@Serializable
 data class SignalingMessage(
     val type: Type,
     val sdp: String? = null,
@@ -14,7 +12,12 @@ data class SignalingMessage(
     val sdpMLineIndex: Int? = null,
     val senderId: String
 ) {
+    @Serializable
     enum class Type { OFFER, ANSWER, ICE_CANDIDATE, BYE }
+}
+
+enum class SignalingState {
+    IDLE, CONNECTING, CONNECTED, DISCONNECTED, ERROR
 }
 
 interface SignalingClient {
