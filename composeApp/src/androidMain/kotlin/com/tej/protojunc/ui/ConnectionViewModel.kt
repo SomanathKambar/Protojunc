@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.CancellationException
 import com.tej.protojunc.common.ServerHealthCheck
 import com.tej.protojunc.common.AndroidServerDiscovery
 import com.tej.protojunc.signalingServerHost
@@ -52,8 +53,24 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
     private fun checkServerPeriodically() {
         viewModelScope.launch {
             while (true) {
-                _serverStatus.value = healthCheck.isServerRunning()
-                delay(3000)
+                try {
+                    val isRunning = healthCheck.isServerRunning()
+                    if (_serverStatus.value && !isRunning) {
+                        // Server went down while we were potentially using it
+                        if (_handshakeStage.value != HandshakeStage.IDLE && 
+                            _handshakeStage.value != HandshakeStage.COMPLETED &&
+                            _handshakeStage.value != HandshakeStage.FAILED) {
+                            Logger.w { "Signaling server disappeared during active stage: ${_handshakeStage.value}" }
+                            _viewModelError.value = "Signaling Server connection lost"
+                            _handshakeStage.value = HandshakeStage.FAILED
+                        }
+                    }
+                    _serverStatus.value = isRunning
+                } catch (e: Exception) {
+                    Logger.e(e) { "Health check failed" }
+                    _serverStatus.value = false
+                }
+                delay(5000)
             }
         }
     }
@@ -61,6 +78,9 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
     override fun onCleared() {
         super.onCleared()
         serverDiscovery.stopDiscovery()
+        viewModelScope.launch {
+            sessionManager.close()
+        }
     }
 
     fun updateServerConfig(host: String, port: Int) {
@@ -68,7 +88,11 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
         com.tej.protojunc.signalingServerPort = port
         healthCheck = ServerHealthCheck(host, port)
         viewModelScope.launch {
-            _serverStatus.value = healthCheck.isServerRunning()
+            try {
+                _serverStatus.value = healthCheck.isServerRunning()
+            } catch (e: Exception) {
+                _serverStatus.value = false
+            }
         }
     }
     
@@ -98,9 +122,12 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
     fun clearError() {
         viewModelScope.launch {
             sessionManager.reset()
+            sessionManager.close()
         }
         _viewModelError.value = null
         _handshakeStage.value = HandshakeStage.IDLE
+        _isInitializing.value = false
+        _isProcessing.value = false
     }
 
     fun setHandshakeStage(stage: HandshakeStage) {
@@ -110,6 +137,7 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
     fun initiateBleHandshake(discoveryManager: DiscoveryManager, peer: PeerDiscovered, onReady: () -> Unit) {
         if (_isInitializing.value || _isProcessing.value) return
         _isInitializing.value = true
+        _viewModelError.value = null
         
         viewModelScope.launch {
             try {
@@ -127,7 +155,7 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
                 val (sdp, _) = SdpMinifier.decodePayload(encodedOffer)
                 
                 if (sdp.length < 50) {
-                    throw IllegalStateException("Decoded SDP is too short: $sdp")
+                    throw IllegalStateException("Decoded SDP is too short or invalid")
                 }
 
                 _handshakeStage.value = HandshakeStage.EXCHANGING_SDP_ANSWER
@@ -145,10 +173,12 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
                 _isInitializing.value = false
                 onReady()
             } catch (e: Exception) {
+                Logger.e(e) { "Handshake Failure" }
+                if (e is CancellationException) throw e
                 _handshakeStage.value = HandshakeStage.FAILED
                 _isInitializing.value = false
-                Logger.e(e) { "Handshake Failure" }
                 _viewModelError.value = "Handshake Failed: ${e.message ?: "Unknown Error"}"
+                sessionManager.close()
             }
         }
     }
@@ -156,8 +186,8 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
     fun cancel() {
         viewModelScope.launch {
             sessionManager.close()
+            sessionManager.reset()
         }
-        sessionManager.reset()
         _localSdp.value = null
         _isInitializing.value = false
         _isProcessing.value = false
@@ -169,6 +199,8 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
         if (_isInitializing.value || _isProcessing.value) return
         _isInitializing.value = true
         _isProcessing.value = true
+        _viewModelError.value = null
+        
         viewModelScope.launch {
             try {
                 sessionManager.createPeerConnection()
@@ -180,9 +212,12 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
                 _isProcessing.value = false
                 if (_localSdp.value != null) onReady()
             } catch (e: Exception) {
+                Logger.e(e) { "Invite Error" }
+                if (e is CancellationException) throw e
                 _isInitializing.value = false
                 _isProcessing.value = false
                 _viewModelError.value = "Invite Error: ${e.message}"
+                sessionManager.close()
             }
         }
     }
@@ -190,10 +225,14 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
     fun handleOfferScanned(encodedOffer: String) {
         if (_isInitializing.value || _isProcessing.value) return
         _isInitializing.value = true
+        _viewModelError.value = null
+        
         viewModelScope.launch {
             try {
                 val (offerSdp, _) = SdpMinifier.decodePayload(encodedOffer)
-                if (offerSdp == "DECODE_ERROR") throw IllegalStateException("Invalid QR/Manual Code")
+                if (offerSdp == "DECODE_ERROR" || offerSdp.length < 50) {
+                    throw IllegalStateException("Invalid QR/Manual Code")
+                }
                 
                 sessionManager.createPeerConnection()
                 sessionManager.handleRemoteDescription(offerSdp, SessionDescriptionType.Offer)
@@ -203,9 +242,11 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
                 _localSdp.value = SdpMinifier.encodePayload(answer, "ANSWER")
                 _isInitializing.value = false
             } catch (e: Exception) {
-                _isInitializing.value = false
                 Logger.e(e) { "Offer Processing Failure" }
+                if (e is CancellationException) throw e
+                _isInitializing.value = false
                 _viewModelError.value = "Handshake Error: ${e.message}"
+                sessionManager.close()
             }
         }
     }
@@ -213,17 +254,22 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
     fun handleAnswerScanned(encodedAnswer: String, onConnected: () -> Unit) {
         if (_isInitializing.value || _isProcessing.value) return
         _isProcessing.value = true
+        _viewModelError.value = null
+        
         viewModelScope.launch {
             try {
                 val (answerSdp, _) = SdpMinifier.decodePayload(encodedAnswer)
-                if (answerSdp == "DECODE_ERROR") throw IllegalStateException("Invalid Answer Code")
+                if (answerSdp == "DECODE_ERROR" || answerSdp.length < 50) {
+                    throw IllegalStateException("Invalid Answer Code")
+                }
                 
                 sessionManager.handleRemoteDescription(answerSdp, SessionDescriptionType.Answer)
                 _isProcessing.value = false
                 onConnected()
             } catch (e: Exception) {
-                _isProcessing.value = false
                 Logger.e(e) { "Answer Processing Failure" }
+                if (e is CancellationException) throw e
+                _isProcessing.value = false
                 _viewModelError.value = "Connection Error: ${e.message}"
             }
         }
@@ -234,5 +280,6 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
             sessionManager.close()
         }
         _localSdp.value = null
+        _handshakeStage.value = HandshakeStage.IDLE
     }
 }

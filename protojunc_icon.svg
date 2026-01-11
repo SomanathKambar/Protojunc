@@ -1,0 +1,12 @@
+<svg width="1024" height="1024" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect width="100" height="100" rx="20" fill="#2D3436"/>
+    <!-- Background Circle -->
+    <circle cx="50" cy="50" r="40" fill="#1A73E8"/>
+    <!-- Monogram PJ -->
+    <path d="M35 30V70 M35 30H55C61.9 30 67.5 35.6 67.5 42.5C67.5 49.4 61.9 55 55 55H35 M55 45V70C55 75.5 50.5 80 45 80H35" stroke="white" stroke-width="4" stroke-linecap="round" fill="none"/>
+    <!-- Connection Points -->
+    <circle cx="50" cy="15" r="3" fill="white"/>
+    <circle cx="85" cy="50" r="3" fill="white"/>
+    <circle cx="50" cy="85" r="3" fill="white"/>
+    <circle cx="15" cy="50" r="3" fill="white"/>
+</svg>

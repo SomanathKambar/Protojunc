@@ -34,7 +34,7 @@ class CollaborationService : Service() {
         return NotificationCompat.Builder(this, "collaboration_channel")
             .setContentTitle("Protojunc Collaboration")
             .setContentText("Session active")
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(com.tej.protojunc.shared.R.drawable.ic_stat_pj)
             .build()
     }
 }

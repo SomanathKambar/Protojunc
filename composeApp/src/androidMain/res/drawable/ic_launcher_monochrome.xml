@@ -1,0 +1,16 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="100"
+    android:viewportHeight="100">
+    <!-- Monochrome version just has the monogram and points -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M35,30 V70 M35,30 H55 A12.5,12.5 0 0,1 55,55 H35 M55,45 V70 A10,10 0 0,1 35,70" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M50,15 m-3,0 a3,3 0 1,1 6,0 a3,3 0 1,1 -6,0
+                          M85,50 m-3,0 a3,3 0 1,1 6,0 a3,3 0 1,1 -6,0
+                          M50,85 m-3,0 a3,3 0 1,1 6,0 a3,3 0 1,1 -6,0
+                          M15,50 m-3,0 a3,3 0 1,1 6,0 a3,3 0 1,1 -6,0" />
+</vector>

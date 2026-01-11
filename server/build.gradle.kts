@@ -26,6 +26,7 @@ dependencies {
     implementation("io.ktor:ktor-server-websockets-jvm:3.0.3")
 
     implementation("io.ktor:ktor-server-call-logging-jvm:3.0.3")
+    implementation("io.ktor:ktor-server-status-pages-jvm:3.0.3")
     
     implementation("org.jmdns:jmdns:3.5.9")
 

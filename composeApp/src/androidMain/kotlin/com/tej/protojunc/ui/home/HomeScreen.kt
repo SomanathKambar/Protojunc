@@ -41,14 +41,23 @@ fun HomeScreen(
         }
 
         Spacer(modifier = Modifier.height(16.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Protojunc", style = MaterialTheme.typography.displayMedium, color = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.width(8.dp))
-            Box(
-                modifier = Modifier
-                    .size(12.dp)
-                    .background(if (serverStatus) Color.Green else Color.Red, CircleShape)
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                painter = androidx.compose.ui.res.painterResource(id = com.tej.protojunc.R.drawable.ic_launcher_foreground),
+                contentDescription = "Protojunc Logo",
+                tint = Color.Unspecified,
+                modifier = Modifier.size(100.dp)
             )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Protojunc", style = MaterialTheme.typography.displayMedium, color = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .background(if (serverStatus) Color.Green else Color.Red, CircleShape)
+                )
+            }
         }
         Text("Universal P2P Video Calls", style = MaterialTheme.typography.bodyLarge)
         if (!serverStatus) {
