@@ -1,4 +1,4 @@
-rootProject.name = "Directo"
+rootProject.name = "Protojunc"
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
 pluginManagement {

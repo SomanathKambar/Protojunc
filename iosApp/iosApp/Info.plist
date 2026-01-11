@@ -5,13 +5,13 @@
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Directo needs Bluetooth to discover and connect to nearby devices for collaboration.</string>
+	<string>Protojunc needs Bluetooth to discover and connect to nearby devices for collaboration.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
-	<string>Directo needs Bluetooth to discover and connect to nearby devices for collaboration.</string>
+	<string>Protojunc needs Bluetooth to discover and connect to nearby devices for collaboration.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Directo needs Camera access for video calling and scanning QR codes.</string>
+	<string>Protojunc needs Camera access for video calling and scanning QR codes.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Directo needs Microphone access for audio during video calls.</string>
+	<string>Protojunc needs Microphone access for audio during video calls.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>bluetooth-central</string>

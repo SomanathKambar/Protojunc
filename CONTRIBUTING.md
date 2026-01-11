@@ -1,6 +1,6 @@
-# Contributing to Directo
+# Contributing to Protojunc
 
-First off, thank you for considering contributing to Directo! It's people like you that make Directo such a great tool.
+First off, thank you for considering contributing to Protojunc! It's people like you that make Protojunc such a great tool.
 
 ## Code of Conduct
 
@@ -14,7 +14,7 @@ Before creating bug reports, please check the existing issues as you might find 
 
 ### Suggesting Enhancements
 
-If you have a great idea for Directo, feel free to open an issue to discuss it.
+If you have a great idea for Protojunc, feel free to open an issue to discuss it.
 
 ### Pull Requests
 

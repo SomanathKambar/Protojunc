@@ -33,7 +33,7 @@ kotlin {
 }
 
 android {
-    namespace = "com.tej.directo.core.signaling"
+    namespace = "com.tej.protojunc.core.signaling"
     compileSdk = 34
     defaultConfig {
         minSdk = 24

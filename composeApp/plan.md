@@ -1,4 +1,4 @@
-# Directo: P2P WebRTC Video/Voice Platform - Enhanced Plan
+# Protojunc: P2P WebRTC Video/Voice Platform - Enhanced Plan
 
 ## Phase 1: Modular Architecture [COMPLETED]
 - [x] **Strategy Pattern Refactor**: Decouple Signaling and Discovery from WebRTC logic.

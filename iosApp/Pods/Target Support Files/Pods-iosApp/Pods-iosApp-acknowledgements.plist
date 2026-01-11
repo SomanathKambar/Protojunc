@@ -285,7 +285,7 @@ Contributors to BoringSSL are required to follow the CLA rules for Chromium:
 https://cla.developers.google.com/clas
 
 Files in third_party/ have their own licenses, as described therein. The MIT
-license, for third_party/fiat, which, unlike other third_party directories, is
+license, for third_party/fiat, which, unlike other third_party protojuncries, is
 compiled into non-test libraries, is included below.
 
 The OpenSSL toolkit stays under a dual license, i.e. both the conditions of the
@@ -397,7 +397,7 @@ record keeping.)
  *    The word 'cryptographic' can be left out if the rouines from the library
  *    being used are not cryptographic related :-).
  * 4. If you include any Windows specific code (or a derivative thereof) from 
- *    the apps directory (application code) you must include an acknowledgement:
+ *    the apps protojuncry (application code) you must include an acknowledgement:
  *    &amp;quot;This product includes software written by Tim Hudson (tjh@cryptsoft.com)&amp;quot;
  * 
  * THIS SOFTWARE IS PROVIDED BY ERIC YOUNG ``AS IS'' AND
@@ -863,7 +863,7 @@ Software from third parties included in the LLVM Project:
 The LLVM Project contains third party software which is under different license
 terms. All such code will be identified clearly using at least one of two
 mechanisms:
-1) It will be in a separate directory tree with its own `LICENSE.txt` or
+1) It will be in a separate protojuncry tree with its own `LICENSE.txt` or
    `LICENSE` file at the top containing the specific license and restrictions
    which apply to that software, or
 2) It will contain specific license and restriction terms at the top of every
@@ -1179,7 +1179,7 @@ Software from third parties included in the LLVM Project:
 The LLVM Project contains third party software which is under different license
 terms. All such code will be identified clearly using at least one of two
 mechanisms:
-1) It will be in a separate directory tree with its own `LICENSE.txt` or
+1) It will be in a separate protojuncry tree with its own `LICENSE.txt` or
    `LICENSE` file at the top containing the specific license and restrictions
    which apply to that software, or
 2) It will contain specific license and restriction terms at the top of every

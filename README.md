@@ -1,6 +1,6 @@
-# Directo
+# Protojunc
 
-Directo is a Universal P2P Communication Platform built with **Kotlin Multiplatform** and **Compose Multiplatform**. It enables seamless Video, Voice, and Text communication across devices using a variety of signaling and discovery methods, ranging from local Bluetooth/WiFi-Direct to Global Online Servers.
+Protojunc is a Universal P2P Communication Platform built with **Kotlin Multiplatform** and **Compose Multiplatform**. It enables seamless Video, Voice, and Text communication across devices using a variety of signaling and discovery methods, ranging from local Bluetooth/WiFi-Direct to Global Online Servers.
 
 ## 🚀 Key Features
 
@@ -45,13 +45,13 @@ Directo is a Universal P2P Communication Platform built with **Kotlin Multiplatf
 ## 💻 Getting Started
 
 ### 1. Run the Signaling Server
-The server is located in the `/server` directory. It broadcasts itself on the local network automatically.
+The server is located in the `/server` protojuncry. It broadcasts itself on the local network automatically.
 
 ```bash
 ./gradlew :server:run
 ```
 - **Dashboard**: `http://localhost:8080/dashboard`
-- **mDNS Service**: `_directo._tcp.local.`
+- **mDNS Service**: `_protojunc._tcp.local.`
 
 ### 2. Run the Android App
 1. Open the project in Android Studio.

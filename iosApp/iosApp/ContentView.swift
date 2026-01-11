@@ -57,7 +57,7 @@ struct HomeView: View {
     var body: some View {
         ZStack {
             VStack(spacing: 24) {
-                Text("Directo P2P Video")
+                Text("Protojunc P2P Video")
                     .font(.largeTitle).bold()
                 
                 Button(action: { startConnection(target: .qrScan) }) {

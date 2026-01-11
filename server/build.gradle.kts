@@ -4,10 +4,10 @@ plugins {
     application
 }
 
-group = "com.tej.directo"
+group = "com.tej.protojunc"
 version = "1.0.0"
 application {
-    mainClass.set("com.tej.directo.ApplicationKt")
+    mainClass.set("com.tej.protojunc.ApplicationKt")
     
     val isDevelopment: Boolean = project.ext.has("development")
     applicationDefaultJvmArgs = listOf("-Dio.ktor.development=$isDevelopment")

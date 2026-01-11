@@ -23,7 +23,7 @@ kotlin {
     cocoapods {
         version = "1.0.0"
         summary = "WebRTC P2P Shared Logic"
-        homepage = "https://github.com/your-repo/directo"
+        homepage = "https://github.com/your-repo/protojunc"
         ios.deploymentTarget = "15.0"
 
         framework {
@@ -78,7 +78,7 @@ dependencies {
 }
 
 android {
-    namespace = "com.tej.directo.shared"
+    namespace = "com.tej.protojunc.shared"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

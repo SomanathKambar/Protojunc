@@ -1,7 +1,7 @@
 Pod::Spec.new do |spec|
     spec.name                     = 'shared'
     spec.version                  = '1.0.0'
-    spec.homepage                 = 'https://github.com/your-repo/directo'
+    spec.homepage                 = 'https://github.com/your-repo/protojunc'
     spec.source                   = { :http=> ''}
     spec.authors                  = ''
     spec.license                  = ''

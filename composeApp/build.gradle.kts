@@ -46,11 +46,11 @@ kotlin {
 }
 
 android {
-    namespace = "com.tej.directo"
+    namespace = "com.tej.protojunc"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
 
     defaultConfig {
-        applicationId = "com.tej.directo"
+        applicationId = "com.tej.protojunc"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1

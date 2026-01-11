@@ -25,7 +25,7 @@ kotlin {
 }
 
 android {
-    namespace = "com.tej.directo.core.common"
+    namespace = "com.tej.protojunc.core.common"
     compileSdk = 34
     defaultConfig {
         minSdk = 24
