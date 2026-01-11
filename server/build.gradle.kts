@@ -15,7 +15,7 @@ application {
 
 dependencies {
 
-    implementation(projects.shared)
+    implementation(project(":core:signaling"))
 
     implementation(libs.logback)
 
@@ -23,11 +23,15 @@ dependencies {
 
     implementation(libs.ktor.serverNetty)
 
-    implementation("io.ktor:ktor-server-websockets-jvm:2.3.12")
+    implementation("io.ktor:ktor-server-websockets-jvm:3.0.3")
 
-    implementation("io.ktor:ktor-server-content-negotiation-jvm:2.3.12")
+    implementation("io.ktor:ktor-server-call-logging-jvm:3.0.3")
+    
+    implementation("org.jmdns:jmdns:3.5.9")
 
-    implementation("io.ktor:ktor-serialization-kotlinx-json-jvm:2.3.12")
+    implementation("io.ktor:ktor-server-content-negotiation-jvm:3.0.3")
+
+    implementation("io.ktor:ktor-serialization-kotlinx-json-jvm:3.0.3")
 
     testImplementation(libs.ktor.serverTestHost)
 

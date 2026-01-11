@@ -1,6 +1,7 @@
 package com.tej.directo.ui
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.tej.directo.webrtc.WebRtcSessionManager
 import com.tej.directo.webrtc.WebRtcState
@@ -12,14 +13,64 @@ import com.tej.directo.discovery.DiscoveryManager
 import co.touchlab.kermit.Logger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import com.tej.directo.common.ServerHealthCheck
+import com.tej.directo.common.AndroidServerDiscovery
+import com.tej.directo.signalingServerHost
 
-class ConnectionViewModel : ViewModel() {
+class ConnectionViewModel(application: Application) : AndroidViewModel(application) {
     val sessionManager = WebRtcSessionManager()
+    
+    private val _serverStatus = MutableStateFlow(false)
+    val serverStatus: StateFlow<Boolean> = _serverStatus.asStateFlow()
+
+    private val serverDiscovery = AndroidServerDiscovery(application)
+    private var healthCheck = ServerHealthCheck(signalingServerHost, com.tej.directo.signalingServerPort)
+
+    init {
+        checkServerPeriodically()
+        observeServerDiscovery()
+        serverDiscovery.startDiscovery()
+    }
+
+    private fun observeServerDiscovery() {
+        viewModelScope.launch {
+            serverDiscovery.discoveredServer.collectLatest { info ->
+                if (info != null) {
+                    Logger.i { "Auto-discovered server at ${info.host}:${info.port}" }
+                    updateServerConfig(info.host, info.port)
+                }
+            }
+        }
+    }
+
+    private fun checkServerPeriodically() {
+        viewModelScope.launch {
+            while (true) {
+                _serverStatus.value = healthCheck.isServerRunning()
+                delay(3000)
+            }
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        serverDiscovery.stopDiscovery()
+    }
+
+    fun updateServerConfig(host: String, port: Int) {
+        com.tej.directo.signalingServerHost = host
+        com.tej.directo.signalingServerPort = port
+        healthCheck = ServerHealthCheck(host, port)
+        viewModelScope.launch {
+            _serverStatus.value = healthCheck.isServerRunning()
+        }
+    }
     
     private val _localSdp = MutableStateFlow<String?>(null)
     val localSdp: StateFlow<String?> = _localSdp.asStateFlow()
@@ -37,7 +88,6 @@ class ConnectionViewModel : ViewModel() {
     val progressMessage = sessionManager.progressMessage
 
     private val _viewModelError = MutableStateFlow<String?>(null)
-    // Merge errors from SessionManager and ViewModel
     val errorMessage: StateFlow<String?> = kotlinx.coroutines.flow.combine(
         sessionManager.errorMessage,
         _viewModelError
@@ -46,9 +96,15 @@ class ConnectionViewModel : ViewModel() {
     }.stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(), null)
 
     fun clearError() {
-        sessionManager.reset()
+        viewModelScope.launch {
+            sessionManager.reset()
+        }
         _viewModelError.value = null
         _handshakeStage.value = HandshakeStage.IDLE
+    }
+
+    fun setHandshakeStage(stage: HandshakeStage) {
+        _handshakeStage.value = stage
     }
 
     fun initiateBleHandshake(discoveryManager: DiscoveryManager, peer: PeerDiscovered, onReady: () -> Unit) {
@@ -68,8 +124,6 @@ class ConnectionViewModel : ViewModel() {
                 }
 
                 _handshakeStage.value = HandshakeStage.EXCHANGING_SDP_OFFER
-                co.touchlab.kermit.Logger.d { "Handshake Diagnostic: Received ${encodedOffer.length} chars via BLE. Content: ${encodedOffer.take(30)}..." }
-                
                 val (sdp, _) = SdpMinifier.decodePayload(encodedOffer)
                 
                 if (sdp.length < 50) {
@@ -93,14 +147,16 @@ class ConnectionViewModel : ViewModel() {
             } catch (e: Exception) {
                 _handshakeStage.value = HandshakeStage.FAILED
                 _isInitializing.value = false
-                Logger.e(e) { "Handshake RCA Failure" }
+                Logger.e(e) { "Handshake Failure" }
                 _viewModelError.value = "Handshake Failed: ${e.message ?: "Unknown Error"}"
             }
         }
     }
 
     fun cancel() {
-        sessionManager.close()
+        viewModelScope.launch {
+            sessionManager.close()
+        }
         sessionManager.reset()
         _localSdp.value = null
         _isInitializing.value = false
@@ -136,7 +192,6 @@ class ConnectionViewModel : ViewModel() {
         _isInitializing.value = true
         viewModelScope.launch {
             try {
-                Logger.d { "Handshake Diagnostic (Offer): Received ${encodedOffer.length} chars. Preview: ${encodedOffer.take(15)}..." }
                 val (offerSdp, _) = SdpMinifier.decodePayload(encodedOffer)
                 if (offerSdp == "DECODE_ERROR") throw IllegalStateException("Invalid QR/Manual Code")
                 
@@ -149,7 +204,7 @@ class ConnectionViewModel : ViewModel() {
                 _isInitializing.value = false
             } catch (e: Exception) {
                 _isInitializing.value = false
-                Logger.e(e) { "Offer Processing RCA Failure" }
+                Logger.e(e) { "Offer Processing Failure" }
                 _viewModelError.value = "Handshake Error: ${e.message}"
             }
         }
@@ -160,7 +215,6 @@ class ConnectionViewModel : ViewModel() {
         _isProcessing.value = true
         viewModelScope.launch {
             try {
-                Logger.d { "Handshake Diagnostic (Answer): Received ${encodedAnswer.length} chars. Preview: ${encodedAnswer.take(15)}..." }
                 val (answerSdp, _) = SdpMinifier.decodePayload(encodedAnswer)
                 if (answerSdp == "DECODE_ERROR") throw IllegalStateException("Invalid Answer Code")
                 
@@ -169,14 +223,16 @@ class ConnectionViewModel : ViewModel() {
                 onConnected()
             } catch (e: Exception) {
                 _isProcessing.value = false
-                Logger.e(e) { "Answer Processing RCA Failure" }
+                Logger.e(e) { "Answer Processing Failure" }
                 _viewModelError.value = "Connection Error: ${e.message}"
             }
         }
     }
 
     fun endCall() {
-        sessionManager.close()
+        viewModelScope.launch {
+            sessionManager.close()
+        }
         _localSdp.value = null
     }
 }

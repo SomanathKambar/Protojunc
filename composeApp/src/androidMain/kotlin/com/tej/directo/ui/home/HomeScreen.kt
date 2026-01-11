@@ -13,23 +13,50 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.tej.directo.p2p.core.discovery.ConnectionType
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+
 @Composable
 fun HomeScreen(
     onModeSelected: (ConnectionType, Boolean) -> Unit, // Boolean true = Host, false = Joiner
-    processing: Boolean = false
+    serverStatus: Boolean = false,
+    processing: Boolean = false,
+    onUpdateConfig: (String, Int) -> Unit = { _, _ -> }
 ) {
     var showRoleDialog by remember { mutableStateOf<ConnectionType?>(null) }
+    var showSettings by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(modifier = Modifier.height(32.dp))
-        Text("Directo", style = MaterialTheme.typography.displayMedium, color = MaterialTheme.colorScheme.primary)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End
+        ) {
+            IconButton(onClick = { showSettings = true }) {
+                Icon(Icons.Default.Settings, "Settings")
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Directo", style = MaterialTheme.typography.displayMedium, color = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(8.dp))
+            Box(
+                modifier = Modifier
+                    .size(12.dp)
+                    .background(if (serverStatus) Color.Green else Color.Red, CircleShape)
+            )
+        }
         Text("Universal P2P Video Calls", style = MaterialTheme.typography.bodyLarge)
+        if (!serverStatus) {
+            Text("Signaling Server Offline", color = Color.Red, style = MaterialTheme.typography.labelSmall)
+        }
         
-        Spacer(modifier = Modifier.height(48.dp))
-        
+        Spacer(modifier = Modifier.height(24.dp))
+
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -85,6 +112,48 @@ fun HomeScreen(
                 )
             }
         }
+    }
+
+    if (showSettings) {
+        var tempHost by remember { mutableStateOf(com.tej.directo.signalingServerHost) }
+        var tempPort by remember { mutableStateOf(com.tej.directo.signalingServerPort.toString()) }
+
+        AlertDialog(
+            onDismissRequest = { showSettings = false },
+            title = { Text("Server Configuration") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = tempHost,
+                        onValueChange = { tempHost = it },
+                        label = { Text("Server IP / Host") },
+                        placeholder = { Text("e.g. 192.168.1.100") }
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = tempPort,
+                        onValueChange = { tempPort = it },
+                        label = { Text("Server Port") },
+                        placeholder = { Text("8080") }
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(modifier = Modifier.size(8.dp).background(if (serverStatus) Color.Green else Color.Red, CircleShape))
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (serverStatus) "Server Connected" else "Server Unreachable", style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = { 
+                    onUpdateConfig(tempHost, tempPort.toIntOrNull() ?: 8080)
+                    showSettings = false 
+                }) { Text("Save") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSettings = false }) { Text("Cancel") }
+            }
+        )
     }
 
     if (showRoleDialog != null) {

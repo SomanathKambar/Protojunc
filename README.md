@@ -1,54 +1,73 @@
-This is a Kotlin Multiplatform project targeting Android, iOS, Server.
+# Directo
 
-* [/composeApp](./composeApp/src) is for code that will be shared across your Compose Multiplatform applications.
-  It contains several subfolders:
-  - [commonMain](./composeApp/src/commonMain/kotlin) is for code that’s common for all targets.
-  - Other folders are for Kotlin code that will be compiled for only the platform indicated in the folder name.
-    For example, if you want to use Apple’s CoreCrypto for the iOS part of your Kotlin app,
-    the [iosMain](./composeApp/src/iosMain/kotlin) folder would be the right place for such calls.
-    Similarly, if you want to edit the Desktop (JVM) specific part, the [jvmMain](./composeApp/src/jvmMain/kotlin)
-    folder is the appropriate location.
+Directo is a Universal P2P Communication Platform built with **Kotlin Multiplatform** and **Compose Multiplatform**. It enables seamless Video, Voice, and Text communication across devices using a variety of signaling and discovery methods, ranging from local Bluetooth/WiFi-Direct to Global Online Servers.
 
-* [/iosApp](./iosApp/iosApp) contains iOS applications. Even if you’re sharing your UI with Compose Multiplatform,
-  you need this entry point for your iOS app. This is also where you should add SwiftUI code for your project.
+## 🚀 Key Features
 
-* [/server](./server/src/main/kotlin) is for the Ktor server application.
+- **Multi-Modal Communication**: Support for Video Calls, Voice Calls (Audio-only), and real-time Text Messaging.
+- **Hybrid Signaling**: 
+  - **Online**: Ktor-based WebSocket signaling with mDNS auto-discovery for local networks.
+  - **Local P2P**: BLE Discovery, Bluetooth Sockets, and WiFi Direct (In-Progress).
+  - **Manual**: QR-Code based SDP exchange for air-gapped environments.
+- **Plug-and-Play Architecture**: Decoupled signaling and discovery logic using the Strategy Pattern.
+- **Real-time Monitoring**: Built-in Server Dashboard with live event logs for trunk-call management.
 
-* [/shared](./shared/src) is for the code that will be shared between all targets in the project.
-  The most important subfolder is [commonMain](./shared/src/commonMain/kotlin). If preferred, you
-  can add code to the platform-specific folders here too.
+## 🛠 Tech Stack
 
-### Build and Run Android Application
+- **Frontend**: Compose Multiplatform (Android & iOS)
+- **Backend**: Ktor Server (Kotlin JVM)
+- **Networking**: Ktor Client (WebSockets, HTTP)
+- **WebRTC**: [WebRTC-KMP](https://github.com/shepeliev/webrtc-kmp) for cross-platform P2P media.
+- **Discovery**: 
+  - **mDNS**: JmDNS (Server) & NsdManager (Android) for zero-config connection.
+  - **BLE**: Kable for Bluetooth Low Energy discovery.
+- **Serialization**: Kotlinx Serialization (JSON & Protobuf)
+- **Logging**: Kermit for unified multiplatform logs.
 
-To build and run the development version of the Android app, use the run configuration from the run widget
-in your IDE’s toolbar or build it directly from the terminal:
-- on macOS/Linux
-  ```shell
-  ./gradlew :composeApp:assembleDebug
-  ```
-- on Windows
-  ```shell
-  .\gradlew.bat :composeApp:assembleDebug
-  ```
+## 🏗 Project Structure
 
-### Build and Run Server
+- `:composeApp`: Shared UI logic using Compose Multiplatform.
+- `:shared`: Core WebRTC logic, Call Orchestrator, and platform-specific drivers.
+- `:server`: Ktor Signaling Server with dashboard and mDNS broadcaster.
+- `:core:signaling`: Abstract signaling interfaces and Ktor/XMPP implementations.
+- `:core:common`: Shared utilities, health checks, and discovery interfaces.
 
-To build and run the development version of the server, use the run configuration from the run widget
-in your IDE’s toolbar or run it directly from the terminal:
-- on macOS/Linux
-  ```shell
-  ./gradlew :server:run
-  ```
-- on Windows
-  ```shell
-  .\gradlew.bat :server:run
-  ```
+## 🚦 Current Status
 
-### Build and Run iOS Application
+| Feature | Status | Notes |
+| :--- | :--- | :--- |
+| **Online Mode** | ✅ Functional | mDNS Auto-discovery, Video/Voice/Message works. |
+| **Server Dashboard** | ✅ Functional | Visit `http://<server-ip>:8080/dashboard` |
+| **Bluetooth (BLE)** | ⚠️ Experimental | Basic discovery works, handshake needs refinement. |
+| **WiFi Direct** | 🛠 In-Progress | Modular drivers defined. |
+| **XMPP (Enterprise)** | 🛠 In-Progress | Architectural hooks ready. |
 
-To build and run the development version of the iOS app, use the run configuration from the run widget
-in your IDE’s toolbar or open the [/iosApp](./iosApp) directory in Xcode and run it from there.
+## 💻 Getting Started
 
----
+### 1. Run the Signaling Server
+The server is located in the `/server` directory. It broadcasts itself on the local network automatically.
 
-Learn more about [Kotlin Multiplatform](https://www.jetbrains.com/help/kotlin-multiplatform-dev/get-started.html)…
+```bash
+./gradlew :server:run
+```
+- **Dashboard**: `http://localhost:8080/dashboard`
+- **mDNS Service**: `_directo._tcp.local.`
+
+### 2. Run the Android App
+1. Open the project in Android Studio.
+2. Ensure your phone is on the same WiFi as the server.
+3. Launch the `:composeApp` module.
+4. The app will auto-discover the server (Server dot will turn Green).
+
+### 3. Run the iOS App
+1. Navigate to `/iosApp` and run `pod install`.
+2. Open `iosApp.xcworkspace` in Xcode.
+3. Run on a physical device or simulator.
+
+## 🤝 Contributing
+
+Contributions are welcome! Please read our [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
+
+## 📜 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

@@ -1,4 +1,4 @@
-package com.tej.directo.p2p.core.signaling
+package com.tej.directo.signaling
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.Serializable
@@ -13,7 +13,7 @@ data class SignalingMessage(
     val senderId: String
 ) {
     @Serializable
-    enum class Type { OFFER, ANSWER, ICE_CANDIDATE, BYE }
+    enum class Type { JOIN, OFFER, ANSWER, ICE_CANDIDATE, BYE, MESSAGE, VOICE_CALL, VIDEO_CALL }
 }
 
 enum class SignalingState {

@@ -22,8 +22,9 @@ import com.tej.directo.discovery.DiscoveryManager
 import com.tej.directo.discovery.PeerDiscovered
 import com.tej.directo.p2p.core.discovery.ConnectionType
 import com.tej.directo.p2p.core.orchestrator.CallSessionOrchestrator
-import com.tej.directo.p2p.impl.server.KtorSignalingClient
-import com.tej.directo.p2p.impl.xmpp.XmppSignalingClient
+import com.tej.directo.signaling.*
+import com.tej.directo.signalingServerHost
+import com.tej.directo.deviceName
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
@@ -96,20 +97,36 @@ fun VideoCallScreen(
     val localTrack by sessionManager.localVideoTrack.collectAsState()
     val connectionState by sessionManager.connectionState.collectAsState()
     val progressMessage by sessionManager.progressMessage.collectAsState()
+    val errorMessage by sessionManager.errorMessage.collectAsState()
     val handshakeStage by viewModel.handshakeStage.collectAsState()
     val localSdp by viewModel.localSdp.collectAsState()
 
+    var showXmppOptions by remember { mutableStateOf(connectionType == ConnectionType.XMPP) }
+    var selectedXmppMode by remember { mutableStateOf<SignalingMessage.Type?>(null) }
+
     val coroutineScope = rememberCoroutineScope()
-    val orchestrator = remember { CallSessionOrchestrator(sessionManager, coroutineScope) }
+    val orchestrator = remember { 
+        CallSessionOrchestrator(
+            webRtcManager = sessionManager, 
+            scope = coroutineScope,
+            onHandshakeStageChanged = { viewModel.setHandshakeStage(it) }
+        ) 
+    }
+    val signalingState by orchestrator.signalingState.collectAsState()
+    val chatMessages by orchestrator.chatMessages.collectAsState("")
+    var textInput by remember { mutableStateOf("") }
+    
+    var retryTrigger by remember { mutableStateOf(0) }
 
     // Production RCA: Handle automated handshake based on role and connection mode
-    LaunchedEffect(isHost, connectionType) {
-        // 1. OPEN CAMERA IMMEDIATELY for everyone
-        sessionManager.createPeerConnection()
-        sessionManager.connectionState.filter { it == WebRtcState.Ready }.first()
+    LaunchedEffect(isHost, connectionType, retryTrigger, selectedXmppMode) {
+        // Only run if not waiting for XMPP selection
+        if (connectionType == ConnectionType.XMPP && selectedXmppMode == null) return@LaunchedEffect
 
         when (connectionType) {
             ConnectionType.BLE -> {
+                sessionManager.createPeerConnection()
+                // Bluetooth logic only runs if connectionType is BLE
                 checkAndRequestBluetooth {
                     if (isHost) {
                         viewModel.prepareInvite {}
@@ -127,16 +144,23 @@ fun VideoCallScreen(
                 }
             }
             ConnectionType.ONLINE -> {
-                val serverClient = KtorSignalingClient(roomCode = roomCode)
+                val serverClient = KtorSignalingClient(
+                    host = signalingServerHost, 
+                    port = com.tej.directo.signalingServerPort,
+                    roomCode = roomCode, 
+                    deviceName = com.tej.directo.deviceName
+                )
                 orchestrator.setSignalingClient(serverClient)
                 orchestrator.startCall(isHost)
             }
             ConnectionType.XMPP -> {
                 val xmppClient = XmppSignalingClient(jid = "user@example.com")
                 orchestrator.setSignalingClient(xmppClient)
-                orchestrator.startCall(isHost)
+                // If it's a message only, we skip peer connection creation inside startCall for now or handle it.
+                orchestrator.startCall(isHost, mode = selectedXmppMode ?: SignalingMessage.Type.VIDEO_CALL)
             }
             ConnectionType.QR -> {
+                sessionManager.createPeerConnection()
                 if (isHost) {
                     viewModel.prepareInvite {}
                 }
@@ -145,6 +169,32 @@ fun VideoCallScreen(
                 Logger.w { "ConnectionType $connectionType logic not implemented" }
             }
         }
+    }
+
+    if (showXmppOptions) {
+        AlertDialog(
+            onDismissRequest = { /* Force selection or back */ },
+            title = { Text("XMPP Mode Selection") },
+            text = { Text("Choose how you want to test the XMPP handshake:") },
+            confirmButton = {
+                Column(Modifier.fillMaxWidth()) {
+                    Button(onClick = { selectedXmppMode = SignalingMessage.Type.VIDEO_CALL; showXmppOptions = false }, Modifier.fillMaxWidth()) { Text("Video Call") }
+                    Spacer(Modifier.height(8.dp))
+                    Button(onClick = { selectedXmppMode = SignalingMessage.Type.VOICE_CALL; showXmppOptions = false }, Modifier.fillMaxWidth()) { Text("Voice Call") }
+                    Spacer(Modifier.height(8.dp))
+                    Button(onClick = { selectedXmppMode = SignalingMessage.Type.MESSAGE; showXmppOptions = false }, Modifier.fillMaxWidth()) { Text("Text Message Only") }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onEndCall) { Text("Cancel") }
+            }
+        )
+    }
+
+    val reconnect = {
+        retryTrigger++
+        viewModel.clearError()
+        sessionManager.reset()
     }
 
     // Auto-broadcast if we are host and offer is ready (for BLE mode)
@@ -168,7 +218,33 @@ fun VideoCallScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-        if (remoteTrack != null) {
+        if (selectedXmppMode == SignalingMessage.Type.MESSAGE) {
+            // Chat UI Mode
+            Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                Spacer(Modifier.height(80.dp))
+                Box(modifier = Modifier.weight(1f).fillMaxWidth().background(Color.DarkGray.copy(alpha = 0.3f), MaterialTheme.shapes.medium).padding(16.dp)) {
+                    Text("Chat Content:\n$chatMessages", color = Color.White)
+                }
+                Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = textInput,
+                        onValueChange = { textInput = it },
+                        modifier = Modifier.weight(1f),
+                        placeholder = { Text("Type a message...") },
+                        colors = OutlinedTextFieldDefaults.colors(unfocusedTextColor = Color.White, focusedTextColor = Color.White)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Button(onClick = { 
+                        coroutineScope.launch {
+                            orchestrator.sendTextMessage(textInput)
+                            textInput = ""
+                        }
+                    }) { Text("Send") }
+                }
+                Spacer(Modifier.height(80.dp))
+            }
+        } else if (remoteTrack != null) {
+
             WebRtcVideoView(
                 videoTrack = remoteTrack,
                 modifier = Modifier.fillMaxSize()
@@ -243,43 +319,71 @@ fun VideoCallScreen(
                 .align(Alignment.TopCenter)
                 .padding(top = 64.dp),
             colors = CardDefaults.cardColors(
-                containerColor = Color.Black.copy(alpha = 0.5f)
+                containerColor = if (errorMessage != null) Color.Red.copy(alpha = 0.7f) else Color.Black.copy(alpha = 0.5f)
             )
         ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                val icon = when (connectionState) {
-                    WebRtcState.Connected -> Icons.Default.Call
-                    WebRtcState.Failed -> Icons.Default.Warning
-                    else -> Icons.Default.Refresh
-                }
-                val color = when (connectionState) {
-                    WebRtcState.Connected -> Color.Green
-                    WebRtcState.Failed -> Color.Red
-                    else -> Color.Yellow
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val icon = when (connectionState) {
+                        WebRtcState.Connected -> Icons.Default.Call
+                        WebRtcState.Failed -> Icons.Default.Warning
+                        else -> Icons.Default.Refresh
+                    }
+                    val color = when (connectionState) {
+                        WebRtcState.Connected -> Color.Green
+                        WebRtcState.Failed -> Color.Red
+                        else -> Color.Yellow
+                    }
+                    
+                                    Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    val statusText = when {
+                                        handshakeStage != HandshakeStage.IDLE && handshakeStage != HandshakeStage.COMPLETED && handshakeStage != HandshakeStage.FAILED -> {
+                                            "Stage: ${handshakeStage.name.lowercase().replace("_", " ").replaceFirstChar { it.uppercase() }}..."
+                                        }
+                                        connectionState == WebRtcState.Closed && signalingState == SignalingState.CONNECTED -> "Network: CLOSED (Signaling OK)"
+                                        connectionState != WebRtcState.Idle -> "Network: ${connectionState.name}"
+                                        else -> progressMessage ?: "Initializing..."
+                                    }
+                                    Text(
+                                        text = statusText,
+                                        color = Color.White,
+                                        style = MaterialTheme.typography.labelLarge
+                                    )                    
+                    if (connectionType == ConnectionType.ONLINE || connectionType == ConnectionType.XMPP) {
+                        VerticalDivider(modifier = Modifier.height(16.dp).padding(horizontal = 8.dp), color = Color.Gray)
+                        val sigColor = when(signalingState) {
+                            SignalingState.CONNECTED -> Color.Green
+                            SignalingState.CONNECTING -> Color.Yellow
+                            SignalingState.ERROR -> Color.Red
+                            else -> Color.Gray
+                        }
+                        Box(modifier = Modifier.size(8.dp).background(sigColor, androidx.compose.foundation.shape.CircleShape))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Signaling: ${signalingState.name}",
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
                 }
                 
-                Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                val statusText = when {
-                    handshakeStage != HandshakeStage.IDLE && handshakeStage != HandshakeStage.COMPLETED && handshakeStage != HandshakeStage.FAILED -> {
-                        "Stage: ${handshakeStage.name.lowercase().replace("_", " ").replaceFirstChar { it.uppercase() }}..."
-                    }
-                    connectionState != WebRtcState.Idle -> "Network: ${connectionState.name}"
-                    else -> progressMessage ?: "Initializing..."
+                errorMessage?.let {
+                    Text(
+                        text = it,
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(bottom = 8.dp, start = 16.dp, end = 16.dp)
+                    )
                 }
-                Text(
-                    text = statusText,
-                    color = Color.White,
-                    style = MaterialTheme.typography.labelLarge
-                )
             }
         }
 
         // Detailed Progress Overlay (Intermittent State Tracker)
-        if (remoteTrack == null && connectionState != WebRtcState.Connected && connectionType != ConnectionType.QR) {
+        if (remoteTrack == null && connectionState != WebRtcState.Connected && connectionState != WebRtcState.Failed && connectionType != ConnectionType.QR) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -297,8 +401,23 @@ fun VideoCallScreen(
                 .padding(bottom = 48.dp),
             horizontalArrangement = Arrangement.spacedBy(24.dp)
         ) {
+            if (connectionState == WebRtcState.Failed || connectionState == WebRtcState.Closed) {
+                FloatingActionButton(
+                    onClick = reconnect,
+                    containerColor = Color.Yellow,
+                    contentColor = Color.Black
+                ) {
+                    Icon(Icons.Default.Refresh, "Reconnect")
+                }
+            }
+
             FloatingActionButton(
-                onClick = onEndCall,
+                onClick = {
+                    coroutineScope.launch {
+                        orchestrator.endCall()
+                        onEndCall()
+                    }
+                },
                 containerColor = Color.Red,
                 contentColor = Color.White
             ) {

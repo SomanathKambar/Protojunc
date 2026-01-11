@@ -55,6 +55,7 @@ fun App() {
     val isProcessing by viewModel.isProcessing.collectAsState()
     val globalError by viewModel.errorMessage.collectAsState()
     val progressMessage by viewModel.progressMessage.collectAsState()
+    val serverStatus by viewModel.serverStatus.collectAsState()
     
     var isNavigating by remember { mutableStateOf(false) }
     var showCancelDialog by remember { mutableStateOf(false) }
@@ -149,22 +150,46 @@ fun App() {
                         HomeScreen(
                             onModeSelected = { type, isHost ->
                                 if (!isNavigating) {
-                                    checkPermissions {
-                                        checkAndRequestBluetooth {
-                                            // Ensure we pop potential stale call state before starting new mode
-                                            viewModel.cancel()
-                                            if (type == ConnectionType.BT_SOCKET) {
-                                                navController.navigate(Screen.BluetoothDirectCall.name)
-                                            } else if (type == ConnectionType.WIFI_DIRECT) {
-                                                navController.navigate(Screen.WifiDirectCall.name)
-                                            } else {
-                                                navController.navigate(Screen.VideoCall.name + "?host=$isHost&type=${type.name}")
+                                    val isBluetoothRequired = type == ConnectionType.BLE || 
+                                                              type == ConnectionType.BT_SOCKET || 
+                                                              type == ConnectionType.WIFI_DIRECT
+                                    
+                                    val action = {
+                                        viewModel.cancel()
+                                        when (type) {
+                                            ConnectionType.BT_SOCKET -> navController.navigate(Screen.BluetoothDirectCall.name)
+                                            ConnectionType.WIFI_DIRECT -> navController.navigate(Screen.WifiDirectCall.name)
+                                            else -> navController.navigate(Screen.VideoCall.name + "?host=$isHost&type=${type.name}")
+                                        }
+                                    }
+
+                                    if (isBluetoothRequired) {
+                                        checkPermissions {
+                                            checkAndRequestBluetooth {
+                                                action()
                                             }
+                                        }
+                                    } else {
+                                        // For Online, XMPP, QR - only check Camera/Audio permissions
+                                        val basicPermissions = mutableListOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
+                                        val allGranted = basicPermissions.all {
+                                            androidx.core.content.ContextCompat.checkSelfPermission(context, it) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                        }
+                                        if (allGranted) {
+                                            action()
+                                        } else {
+                                            isNavigating = true
+                                            pendingBluetoothAction = action
+                                            permissionLauncher.launch(basicPermissions.toTypedArray())
                                         }
                                     }
                                 }
                             },
-                            processing = isNavigating
+                            serverStatus = serverStatus,
+                            processing = isNavigating,
+                            onUpdateConfig = { host, port ->
+                                viewModel.updateServerConfig(host, port)
+                            }
                         )
                     }
                     

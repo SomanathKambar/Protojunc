@@ -1,0 +1,42 @@
+Calculating task graph as no cached configuration is available for tasks: :server:run
+Type-safe project accessors is an incubating feature.
+
+> Configure project :shared
+w: [33m[1m⚠️ CInterop Commonization Disabled[0m[0m
+The project is using Kotlin Multiplatform with hierarchical structure and disabled 'cinterop commonization'
+
+'cinterop commonization' can be enabled in your 'gradle.properties'
+kotlin.mpp.enableCInteropCommonization=true
+
+To hide this message, add to your 'gradle.properties'
+kotlin.mpp.enableCInteropCommonization.nowarn=true 
+
+The following source sets are affected: 
+[appleMain, iosMain, nativeMain]
+
+The following cinterops are affected: 
+[cinterop:compilation/compileKotlinIosArm64/WebRTC, cinterop:compilation/compileKotlinIosSimulatorArm64/WebRTC, cinterop:compilation/compileKotlinIosX64/WebRTC]
+[32m[1mSolution:[0m[0m
+[32m[3mPlease enable 'cinterop commonization' in your 'gradle.properties'[0m[0m
+[36mSee: [0m[34mhttps://kotlinlang.org/docs/mpp-share-on-platforms.html#use-native-libraries-in-the-hierarchical-structure[0m[36m[0m
+
+
+> Task :server:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :core:signaling:jvmProcessResources NO-SOURCE
+> Task :core:signaling:processJvmMainResources SKIPPED
+> Task :core:signaling:kmpPartiallyResolvedDependenciesChecker
+> Task :core:signaling:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :server:processResources
+> Task :core:signaling:compileKotlinJvm
+> Task :core:signaling:compileJvmMainJava NO-SOURCE
+> Task :core:signaling:jvmMainClasses
+> Task :core:signaling:jvmJar
+> Task :server:compileKotlin
+> Task :server:compileJava NO-SOURCE
+> Task :server:classes
+
+> Task :server:run
+[SERVER] Starting Directo Signaling Server on port 8080...
+2026-01-11 11:11:03.336 [main] INFO  io.ktor.server.Application - Autoreload is disabled because the development mode is off.
+2026-01-11 11:11:03.404 [main] INFO  io.ktor.server.Application - Application started in 0.155 seconds.
+2026-01-11 11:11:03.480 [DefaultDispatcher-worker-1] INFO  io.ktor.server.Application - Responding at http://0.0.0.0:8080

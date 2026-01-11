@@ -3,7 +3,7 @@ package com.tej.directo.p2p.impl.bluetooth
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothServerSocket
 import android.bluetooth.BluetoothSocket
-import com.tej.directo.p2p.core.signaling.*
+import com.tej.directo.signaling.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.serialization.json.Json

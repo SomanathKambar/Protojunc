@@ -26,7 +26,12 @@ object SignalingEncoder {
         val bytes = protoBuf.encodeToByteArray(SignalingPayload.serializer(), payload)
         
         val buffer = Buffer()
-        GzipSink(buffer).buffer().use { it.write(bytes) }
+        val sink = GzipSink(buffer).buffer()
+        try {
+            sink.write(bytes)
+        } finally {
+            sink.close()
+        }
         val compressedBytes = buffer.readByteArray()
         
         return Base64.UrlSafe.encode(compressedBytes)
@@ -44,7 +49,12 @@ object SignalingEncoder {
             
             val buffer = Buffer()
             buffer.write(compressedBytes)
-            val decompressedBytes = GzipSource(buffer).buffer().use { it.readByteArray() }
+            val source = GzipSource(buffer).buffer()
+            val decompressedBytes = try {
+                source.readByteArray()
+            } finally {
+                source.close()
+            }
             
             protoBuf.decodeFromByteArray(SignalingPayload.serializer(), decompressedBytes)
         } catch (e: Exception) {

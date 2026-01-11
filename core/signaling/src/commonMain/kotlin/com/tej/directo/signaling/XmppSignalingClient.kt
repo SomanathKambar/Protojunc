@@ -1,6 +1,5 @@
-package com.tej.directo.p2p.impl.xmpp
+package com.tej.directo.signaling
 
-import com.tej.directo.p2p.core.signaling.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import co.touchlab.kermit.Logger

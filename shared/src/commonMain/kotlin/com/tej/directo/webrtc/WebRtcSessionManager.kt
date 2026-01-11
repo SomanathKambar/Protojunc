@@ -37,10 +37,10 @@ class WebRtcSessionManager {
         localVideoTrack.value = null
     }
 
-    suspend fun createPeerConnection() {
+    suspend fun createPeerConnection(videoEnabled: Boolean = true) = withContext(Dispatchers.Default) {
         try {
-            close()
-            reset()
+            close() // Threads-safe close
+            withContext(Dispatchers.Main) { reset() }
             _progressMessage.value = "Initializing Engine..."
             _connectionState.value = WebRtcState.Initializing
             
@@ -53,16 +53,20 @@ class WebRtcSessionManager {
             // Initialize Camera & Mic
             _progressMessage.value = "Starting Media..."
             try {
-                Logger.d { "Requesting User Media (Selfie)..." }
-                val stream = MediaDevices.getUserMedia(audio = true, video = true)
+                Logger.d { "Requesting User Media (Audio: true, Video: $videoEnabled)..." }
+                val stream = MediaDevices.getUserMedia(audio = true, video = videoEnabled)
                 
-                val videoTrack = stream.videoTracks.firstOrNull()
-                if (videoTrack != null) {
-                    localVideoTrack.value = videoTrack
+                if (videoEnabled) {
+                    val videoTrack = stream.videoTracks.firstOrNull()
+                    if (videoTrack != null) {
+                        withContext(Dispatchers.Main) {
+                            localVideoTrack.value = videoTrack
+                        }
+                    }
+                    stream.videoTracks.forEach { track -> pc.addTrack(track, stream) }
                 }
 
                 stream.audioTracks.forEach { track -> pc.addTrack(track, stream) }
-                stream.videoTracks.forEach { track -> pc.addTrack(track, stream) }
             } catch (mediaError: Exception) {
                 Logger.e(mediaError) { "Failed to get user media" }
                 _errorMessage.value = "Camera Error: ${mediaError.message}"
@@ -77,14 +81,16 @@ class WebRtcSessionManager {
             pc.onConnectionStateChange
                 .onEach { state ->
                     Logger.d { "PeerConnection State Change: $state" }
-                    _connectionState.value = when(state) {
-                        PeerConnectionState.New -> WebRtcState.Ready
-                        PeerConnectionState.Connecting -> WebRtcState.Connecting
-                        PeerConnectionState.Connected -> WebRtcState.Connected
-                        PeerConnectionState.Failed -> WebRtcState.Failed
-                        PeerConnectionState.Disconnected -> WebRtcState.Failed
-                        PeerConnectionState.Closed -> WebRtcState.Closed
-                        else -> _connectionState.value
+                    withContext(Dispatchers.Main) {
+                        _connectionState.value = when(state) {
+                            PeerConnectionState.New -> WebRtcState.Ready
+                            PeerConnectionState.Connecting -> WebRtcState.Connecting
+                            PeerConnectionState.Connected -> WebRtcState.Connected
+                            PeerConnectionState.Failed -> WebRtcState.Failed
+                            PeerConnectionState.Disconnected -> WebRtcState.Failed
+                            PeerConnectionState.Closed -> WebRtcState.Closed
+                            else -> _connectionState.value
+                        }
                     }
                 }
                 .launchIn(scope)
@@ -93,26 +99,32 @@ class WebRtcSessionManager {
                 .onEach { event ->
                     val track = event.track
                     if (track is VideoTrack) {
-                        remoteVideoTrack.value = track
+                        withContext(Dispatchers.Main) {
+                            remoteVideoTrack.value = track
+                        }
                     }
                 }
                 .launchIn(scope)
             
             _progressMessage.value = "Ready"
-            _connectionState.value = WebRtcState.Ready
+            withContext(Dispatchers.Main) {
+                _connectionState.value = WebRtcState.Ready
+            }
         } catch (e: Exception) {
             Logger.e(e) { "Engine Error" }
             _errorMessage.value = "Engine Error: ${e.message}"
-            _connectionState.value = WebRtcState.Failed
+            withContext(Dispatchers.Main) {
+                _connectionState.value = WebRtcState.Failed
+            }
         }
     }
 
-    suspend fun addIceCandidate(model: IceCandidateModel) {
+    suspend fun addIceCandidate(model: IceCandidateModel) = withContext(Dispatchers.Default) {
         peerConnection?.addIceCandidate(createIceCandidate(model))
     }
 
-    suspend fun createOffer(): String? {
-        val pc = peerConnection ?: return null
+    suspend fun createOffer(): String? = withContext(Dispatchers.Default) {
+        val pc = peerConnection ?: return@withContext null
         val offer = pc.createOffer(OfferAnswerOptions())
         pc.setLocalDescription(offer)
         
@@ -123,10 +135,10 @@ class WebRtcSessionManager {
             attempts++
         }
         
-        return pc.localDescription?.sdp
+        pc.localDescription?.sdp
     }
 
-    suspend fun handleRemoteDescription(sdp: String, type: SessionDescriptionType) {
+    suspend fun handleRemoteDescription(sdp: String, type: SessionDescriptionType) = withContext(Dispatchers.Default) {
         try {
             val description = SessionDescription(type, sdp)
             peerConnection?.setRemoteDescription(description)
@@ -136,8 +148,8 @@ class WebRtcSessionManager {
         }
     }
 
-    suspend fun createAnswer(): String? {
-        val pc = peerConnection ?: return null
+    suspend fun createAnswer(): String? = withContext(Dispatchers.Default) {
+        val pc = peerConnection ?: return@withContext null
         val answer = pc.createAnswer(OfferAnswerOptions())
         pc.setLocalDescription(answer)
         
@@ -147,12 +159,18 @@ class WebRtcSessionManager {
             attempts++
         }
         
-        return pc.localDescription?.sdp
+        pc.localDescription?.sdp
     }
 
-    fun close() {
-        peerConnection?.close()
+    suspend fun close() = withContext(Dispatchers.Main) {
+        try {
+            peerConnection?.close()
+        } catch (e: Exception) {
+            Logger.e(e) { "Error closing PeerConnection" }
+        }
         peerConnection = null
+        remoteVideoTrack.value = null
+        localVideoTrack.value = null
         _connectionState.value = WebRtcState.Closed
     }
 }

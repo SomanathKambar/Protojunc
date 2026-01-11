@@ -39,6 +39,8 @@ kotlin {
     
     sourceSets {
         commonMain.dependencies {
+            api(project(":core:signaling"))
+            api(project(":core:common"))
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.kotlinx.serialization.protobuf)
             implementation(libs.kotlinx.coroutines.core)
