@@ -10,5 +10,7 @@ enum class Screen {
     JoinBle,
     BluetoothDirectCall,
     WifiDirectCall,
-    VideoCall
+    VideoCall,
+    FileVault,
+    MeshCall
 }

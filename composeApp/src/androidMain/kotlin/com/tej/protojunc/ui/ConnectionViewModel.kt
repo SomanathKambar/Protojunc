@@ -7,7 +7,8 @@ import com.tej.protojunc.webrtc.WebRtcSessionManager
 import com.tej.protojunc.webrtc.WebRtcState
 import com.tej.protojunc.discovery.PeerDiscovered
 import com.shepeliev.webrtckmp.SessionDescriptionType
-import com.tej.protojunc.util.SdpMinifier
+import com.tej.protojunc.signaling.util.SdpMinifier
+import com.tej.protojunc.signaling.SignalingMessage
 import com.tej.protojunc.webrtc.HandshakeStage
 import com.tej.protojunc.discovery.DiscoveryManager
 import co.touchlab.kermit.Logger
@@ -23,10 +24,38 @@ import kotlinx.coroutines.CancellationException
 import com.tej.protojunc.common.ServerHealthCheck
 import com.tej.protojunc.common.AndroidServerDiscovery
 import com.tej.protojunc.signalingServerHost
+import com.tej.protojunc.common.IdentityManager
+import com.tej.protojunc.common.DataStoreIdentityManager
+import com.tej.protojunc.common.createDataStore
+import com.tej.protojunc.common.UserIdentity
+import com.tej.protojunc.discovery.PresenceManager
+import com.tej.protojunc.discovery.PresenceManagerImpl
+import com.tej.protojunc.discovery.AndroidPresenceAdvertiser
+import com.tej.protojunc.discovery.AndroidPresenceScanner
+import android.bluetooth.BluetoothManager
+import android.content.Context
+
+import com.tej.protojunc.vault.FileTransferManager
+import com.tej.protojunc.vault.AndroidFileTransferManager
 
 class ConnectionViewModel(application: Application) : AndroidViewModel(application) {
     val sessionManager = WebRtcSessionManager()
     
+    val identityManager: IdentityManager = DataStoreIdentityManager(createDataStore(application))
+    private val _userIdentity = MutableStateFlow<UserIdentity?>(null)
+    val userIdentity: StateFlow<UserIdentity?> = _userIdentity.asStateFlow()
+
+    private val bluetoothManager = application.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+    val presenceManager: PresenceManager = PresenceManagerImpl(
+        identityManager = identityManager,
+        advertiser = AndroidPresenceAdvertiser(application, bluetoothManager.adapter),
+        scanner = AndroidPresenceScanner(application, bluetoothManager.adapter),
+        scope = viewModelScope
+    )
+    val nearbyPeers = presenceManager.nearbyPeers
+
+    val fileTransferManager: FileTransferManager = AndroidFileTransferManager(application)
+
     private val _serverStatus = MutableStateFlow(false)
     val serverStatus: StateFlow<Boolean> = _serverStatus.asStateFlow()
 
@@ -37,6 +66,21 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
         checkServerPeriodically()
         observeServerDiscovery()
         serverDiscovery.startDiscovery()
+        loadIdentity()
+        startFileServer()
+    }
+
+    private fun startFileServer() {
+        viewModelScope.launch {
+            fileTransferManager.startFileServer()
+        }
+    }
+
+    private fun loadIdentity() {
+        viewModelScope.launch {
+            val identity = identityManager.getOrCreateIdentity(com.tej.protojunc.deviceName)
+            _userIdentity.value = identity
+        }
     }
 
     private fun observeServerDiscovery() {
@@ -164,7 +208,8 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
                 val answer = sessionManager.createAnswer()
                 if (answer == null) throw IllegalStateException("Local Answer generation failed")
                 
-                val encodedAnswer = SdpMinifier.encodePayload(answer, "ANSWER")
+                val identity = _userIdentity.value ?: throw IllegalStateException("Identity not loaded")
+                val encodedAnswer = SdpMinifier.encodePayload(answer, SignalingMessage.Type.ANSWER, identity.deviceId)
                 _localSdp.value = encodedAnswer
 
                 discoveryManager.writeToPeer(peer, encodedAnswer)
@@ -207,7 +252,8 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
                 val offer = sessionManager.createOffer()
                 if (offer == null) throw IllegalStateException("Offer generation failed")
                 
-                _localSdp.value = offer.let { SdpMinifier.encodePayload(it, "OFFER") }
+                val identity = _userIdentity.value ?: throw IllegalStateException("Identity not loaded")
+                _localSdp.value = offer.let { SdpMinifier.encodePayload(it, SignalingMessage.Type.OFFER, identity.deviceId) }
                 _isInitializing.value = false
                 _isProcessing.value = false
                 if (_localSdp.value != null) onReady()
@@ -239,7 +285,8 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
                 val answer = sessionManager.createAnswer()
                 if (answer == null) throw IllegalStateException("Answer generation failed")
                 
-                _localSdp.value = SdpMinifier.encodePayload(answer, "ANSWER")
+                val identity = _userIdentity.value ?: throw IllegalStateException("Identity not loaded")
+                _localSdp.value = SdpMinifier.encodePayload(answer, SignalingMessage.Type.ANSWER, identity.deviceId)
                 _isInitializing.value = false
             } catch (e: Exception) {
                 Logger.e(e) { "Offer Processing Failure" }

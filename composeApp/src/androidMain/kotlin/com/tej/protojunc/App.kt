@@ -34,6 +34,7 @@ import com.shepeliev.webrtckmp.SessionDescriptionType
 import kotlinx.coroutines.launch
 import androidx.compose.ui.input.pointer.pointerInput
 import com.tej.protojunc.discovery.PeerDiscovered
+import com.tej.protojunc.models.NearbyPeer
 import com.tej.protojunc.discovery.AndroidPeripheralAdvertiser
 import com.tej.protojunc.discovery.KableDiscoveryManager
 import com.tej.protojunc.discovery.DiscoveryManager
@@ -42,6 +43,12 @@ import com.tej.protojunc.bluetooth.AndroidBluetoothCallManager
 import com.tej.protojunc.bluetooth.AndroidWifiDirectCallManager
 import com.tej.protojunc.ui.bluetooth.BluetoothCallScreen
 import com.tej.protojunc.ui.wifi.WifiDirectCallScreen
+import com.tej.protojunc.vault.FileVaultScreen
+import com.tej.protojunc.ui.mesh.MeshCallScreen
+import com.tej.protojunc.p2p.core.orchestrator.MeshCoordinator
+import com.tej.protojunc.p2p.core.orchestrator.LinkOrchestrator
+import com.tej.protojunc.p2p.core.orchestrator.TransportPriority
+import com.tej.protojunc.ui.theme.ProtojuncTheme
 
 @Composable
 fun App() {
@@ -56,6 +63,7 @@ fun App() {
     val globalError by viewModel.errorMessage.collectAsState()
     val progressMessage by viewModel.progressMessage.collectAsState()
     val serverStatus by viewModel.serverStatus.collectAsState()
+    val nearbyPeers by viewModel.nearbyPeers.collectAsState()
     
     var isNavigating by remember { mutableStateOf(false) }
     var showCancelDialog by remember { mutableStateOf(false) }
@@ -64,13 +72,17 @@ fun App() {
     
     var roomCode by remember { mutableStateOf("APPLE") }
     var selectedPeer by remember { mutableStateOf<PeerDiscovered?>(null) }
-    val advertiser = remember {
-        val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-        AndroidPeripheralAdvertiser(context, manager.adapter)
-    }
+    
+    val bluetoothManager = remember { context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager }
+    val advertiser = remember { AndroidPeripheralAdvertiser(context, bluetoothManager.adapter) }
     val discoveryManager: DiscoveryManager = remember { KableDiscoveryManager(advertiser) }
     val bluetoothCallManager = remember { AndroidBluetoothCallManager(context, scope) }
     val wifiDirectCallManager = remember { AndroidWifiDirectCallManager(context, scope) }
+    val linkOrchestrator: LinkOrchestrator = remember { 
+        LinkOrchestrator(scope) { transport: TransportPriority, bitrate: Int ->
+            viewModel.sessionManager.setBitrate(bitrate)
+        } 
+    }
 
     // Reset navigation lock after a timeout as a safety measure
     LaunchedEffect(isNavigating) {
@@ -80,11 +92,30 @@ fun App() {
         }
     }
 
+    // Auto-start presence if permissions are already granted
+    LaunchedEffect(Unit) {
+        val required = mutableListOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            required.add(Manifest.permission.BLUETOOTH_SCAN)
+            required.add(Manifest.permission.BLUETOOTH_ADVERTISE)
+            required.add(Manifest.permission.BLUETOOTH_CONNECT)
+        } else {
+            required.add(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+        
+        val allGranted = required.all {
+            androidx.core.content.ContextCompat.checkSelfPermission(context, it) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+        
+        if (allGranted && bluetoothManager.adapter.isEnabled) {
+            viewModel.presenceManager.startPresence()
+        }
+    }
+
     val btLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { _ -> 
-        val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-        if (manager.adapter.isEnabled) {
+        if (bluetoothManager.adapter.isEnabled) {
             pendingBluetoothAction?.invoke()
         }
         pendingBluetoothAction = null
@@ -92,8 +123,7 @@ fun App() {
     }
 
     val checkAndRequestBluetooth = { onReady: () -> Unit ->
-        val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-        if (!manager.adapter.isEnabled) {
+        if (!bluetoothManager.adapter.isEnabled) {
             pendingBluetoothAction = onReady
             btLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
         } else {
@@ -108,7 +138,6 @@ fun App() {
         val essentialGranted = essential.all { results[it] == true }
         
         if (essentialGranted) {
-            // After permissions are granted, continue the action
             pendingBluetoothAction?.invoke()
         }
         pendingNavigation = null
@@ -139,7 +168,7 @@ fun App() {
         }
     }
 
-    MaterialTheme {
+    ProtojuncTheme {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             contentWindowInsets = WindowInsets.safeDrawing
@@ -148,17 +177,21 @@ fun App() {
                 NavHost(navController = navController, startDestination = Screen.Home.name) {
                     composable(Screen.Home.name) {
                         HomeScreen(
+                            nearbyPeers = nearbyPeers,
+                            onVaultClick = { navController.navigate(Screen.FileVault.name) },
                             onModeSelected = { type, isHost ->
                                 if (!isNavigating) {
                                     val isBluetoothRequired = type == ConnectionType.BLE || 
                                                               type == ConnectionType.BT_SOCKET || 
-                                                              type == ConnectionType.WIFI_DIRECT
+                                                              type == ConnectionType.WIFI_DIRECT ||
+                                                              type == ConnectionType.MESH
                                     
                                     val action = {
                                         viewModel.cancel()
                                         when (type) {
                                             ConnectionType.BT_SOCKET -> navController.navigate(Screen.BluetoothDirectCall.name)
                                             ConnectionType.WIFI_DIRECT -> navController.navigate(Screen.WifiDirectCall.name)
+                                            ConnectionType.MESH -> navController.navigate(Screen.MeshCall.name + "?host=$isHost")
                                             else -> navController.navigate(Screen.VideoCall.name + "?host=$isHost&type=${type.name}")
                                         }
                                     }
@@ -170,7 +203,6 @@ fun App() {
                                             }
                                         }
                                     } else {
-                                        // For Online, XMPP, QR - only check Camera/Audio permissions
                                         val basicPermissions = mutableListOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
                                         val allGranted = basicPermissions.all {
                                             androidx.core.content.ContextCompat.checkSelfPermission(context, it) == android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -300,6 +332,7 @@ fun App() {
                             sessionManager = viewModel.sessionManager,
                             viewModel = viewModel,
                             discoveryManager = discoveryManager,
+                            linkOrchestrator = linkOrchestrator,
                             isHost = isHost,
                             roomCode = roomCode,
                             connectionType = type,
@@ -324,6 +357,46 @@ fun App() {
                             manager = wifiDirectCallManager,
                             onBack = { navController.popBackStack() }
                         )
+                    }
+
+                    composable(Screen.FileVault.name) {
+                        val userIdentity by viewModel.userIdentity.collectAsState()
+                        FileVaultScreen(
+                            manager = viewModel.fileTransferManager,
+                            userIdentity = userIdentity,
+                            nearbyPeers = nearbyPeers,
+                            onBack = { navController.popBackStack() }
+                        )
+                    }
+
+                    composable(
+                        route = Screen.MeshCall.name + "?host={isHost}",
+                        arguments = listOf(
+                            androidx.navigation.navArgument("isHost") {
+                                type = androidx.navigation.NavType.BoolType
+                                defaultValue = false
+                            }
+                        )
+                    ) { backStackEntry ->
+                        val isHost = backStackEntry.arguments?.getBoolean("isHost") ?: false
+                        val userIdentity by viewModel.userIdentity.collectAsState()
+                        if (userIdentity != null) {
+                            val meshCoordinator = remember {
+                                MeshCoordinator(
+                                    localId = userIdentity!!.deviceId,
+                                    isHost = isHost,
+                                    scope = scope,
+                                    signalingClient = linkOrchestrator,
+                                    discoveryManager = discoveryManager
+                                )
+                            }
+                            MeshCallScreen(
+                                coordinator = meshCoordinator,
+                                nearbyPeers = nearbyPeers,
+                                checkAndRequestBluetooth = { checkAndRequestBluetooth(it) },
+                                onLeave = { navController.popBackStack(Screen.Home.name, false) }
+                            )
+                        }
                     }
 
                     composable(Screen.InviteBle.name) {
@@ -363,7 +436,6 @@ fun App() {
                         modifier = Modifier
                             .fillMaxSize()
                             .pointerInput(Unit) {
-                                // Consume all clicks to prevent background interaction
                             },
                         color = Color.Black.copy(alpha = 0.6f)
                     ) {
@@ -439,7 +511,6 @@ fun SelectionScreen(
         Spacer(modifier = Modifier.height(16.dp))
         Button(
             onClick = { 
-                // Placeholder for WiFi Direct/BT Socket refined flow
                 onQr() 
             }, 
             modifier = Modifier.fillMaxWidth().height(56.dp),
@@ -450,7 +521,6 @@ fun SelectionScreen(
         Spacer(modifier = Modifier.height(16.dp))
         Button(
             onClick = { 
-                // Navigation to Online Call mode
                 onQr()
             }, 
             modifier = Modifier.fillMaxWidth().height(56.dp),

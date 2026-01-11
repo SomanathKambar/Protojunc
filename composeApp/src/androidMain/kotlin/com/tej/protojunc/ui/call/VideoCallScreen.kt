@@ -22,6 +22,8 @@ import com.tej.protojunc.discovery.DiscoveryManager
 import com.tej.protojunc.discovery.PeerDiscovered
 import com.tej.protojunc.p2p.core.discovery.ConnectionType
 import com.tej.protojunc.p2p.core.orchestrator.CallSessionOrchestrator
+import com.tej.protojunc.p2p.core.orchestrator.LinkOrchestrator
+import com.tej.protojunc.p2p.core.orchestrator.TransportPriority
 import com.tej.protojunc.signaling.*
 import com.tej.protojunc.signalingServerHost
 import com.tej.protojunc.deviceName
@@ -57,8 +59,8 @@ fun ProgressStepper(currentStage: HandshakeStage) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 val circleColor = when {
-                    isCompleted -> Color.Green
-                    isCurrent -> Color.Yellow
+                    isCompleted -> MaterialTheme.colorScheme.tertiary
+                    isCurrent -> MaterialTheme.colorScheme.secondary
                     else -> Color.Gray
                 }
                 
@@ -67,11 +69,11 @@ fun ProgressStepper(currentStage: HandshakeStage) {
                 Text(
                     text = label,
                     color = if (isCurrent) Color.White else Color.LightGray,
-                    style = if (isCurrent) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodySmall
+                    style = if (isCurrent) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodySmall
                 )
                 if (isCurrent) {
                     Spacer(modifier = Modifier.weight(1f))
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
                 }
             }
             
@@ -87,6 +89,7 @@ fun VideoCallScreen(
     sessionManager: WebRtcSessionManager,
     viewModel: ConnectionViewModel,
     discoveryManager: DiscoveryManager,
+    linkOrchestrator: LinkOrchestrator,
     isHost: Boolean,
     roomCode: String,
     connectionType: ConnectionType = ConnectionType.BLE,
@@ -100,73 +103,76 @@ fun VideoCallScreen(
     val errorMessage by sessionManager.errorMessage.collectAsState()
     val handshakeStage by viewModel.handshakeStage.collectAsState()
     val localSdp by viewModel.localSdp.collectAsState()
+    val userIdentity by viewModel.userIdentity.collectAsState()
 
     var showXmppOptions by remember { mutableStateOf(connectionType == ConnectionType.XMPP) }
     var selectedXmppMode by remember { mutableStateOf<SignalingMessage.Type?>(null) }
 
     val coroutineScope = rememberCoroutineScope()
-    val orchestrator = remember { 
+    val orchestrator = remember(userIdentity) { 
         CallSessionOrchestrator(
             webRtcManager = sessionManager, 
+            localId = userIdentity?.deviceId ?: "anonymous",
             scope = coroutineScope,
             onHandshakeStageChanged = { viewModel.setHandshakeStage(it) }
         ) 
     }
+    
+    // Wire LinkOrchestrator to Orchestrator
+    LaunchedEffect(linkOrchestrator) {
+        orchestrator.setSignalingClient(linkOrchestrator)
+    }
+
     val signalingState by orchestrator.signalingState.collectAsState()
+    
+    // Send Identity when connected
+    LaunchedEffect(signalingState) {
+        if (signalingState == SignalingState.CONNECTED && userIdentity != null) {
+            orchestrator.sendIdentity(userIdentity!!.publicKey)
+        }
+    }
+
     val chatMessages by orchestrator.chatMessages.collectAsState("")
     var textInput by remember { mutableStateOf("") }
     
     var retryTrigger by remember { mutableStateOf(0) }
 
-    // Production RCA: Handle automated handshake based on role and connection mode
-    LaunchedEffect(isHost, connectionType, retryTrigger, selectedXmppMode) {
-        // Only run if not waiting for XMPP selection
-        if (connectionType == ConnectionType.XMPP && selectedXmppMode == null) return@LaunchedEffect
+    // Unified Link Layer: Auto-configure transports
+    LaunchedEffect(isHost, connectionType, retryTrigger, selectedXmppMode, userIdentity) {
+        if (userIdentity == null) return@LaunchedEffect
+        
+        // 1. Always add Cloud/Online transport if possible
+        val serverClient = KtorSignalingClient(
+            host = signalingServerHost, 
+            port = com.tej.protojunc.signalingServerPort,
+            roomCode = roomCode, 
+            deviceName = userIdentity?.displayName ?: com.tej.protojunc.deviceName
+        )
+        linkOrchestrator.addTransport(TransportPriority.CLOUD, serverClient)
 
-        when (connectionType) {
-            ConnectionType.BLE -> {
-                sessionManager.createPeerConnection()
-                // Bluetooth logic only runs if connectionType is BLE
-                checkAndRequestBluetooth {
-                    if (isHost) {
-                        viewModel.prepareInvite {}
-                    } else {
-                        coroutineScope.launch {
-                            var alreadyConnecting = false
-                            discoveryManager.observeNearbyPeers().collect { peer ->
-                                if (!alreadyConnecting && (roomCode.isEmpty() || peer.roomCode.equals(roomCode, ignoreCase = true))) {
-                                    alreadyConnecting = true
-                                    viewModel.initiateBleHandshake(discoveryManager, peer) {}
-                                }
+        // 2. Add XMPP if selected
+        if (connectionType == ConnectionType.XMPP && selectedXmppMode != null) {
+            val xmppClient = XmppSignalingClient(jid = "${userIdentity!!.deviceId}@example.com")
+            linkOrchestrator.addTransport(TransportPriority.CLOUD, xmppClient) // Treat as cloud for now
+        }
+
+        // 3. Connect everything
+        linkOrchestrator.connect()
+        orchestrator.startCall(isHost, mode = selectedXmppMode ?: SignalingMessage.Type.VIDEO_CALL)
+
+        // Handle BLE/P2P logic separately for now as it needs special discovery hooks
+        if (connectionType == ConnectionType.BLE) {
+            sessionManager.createPeerConnection()
+            checkAndRequestBluetooth {
+                if (!isHost) {
+                    coroutineScope.launch {
+                        discoveryManager.observeNearbyPeers().collect { peer ->
+                            if (roomCode.isEmpty() || peer.roomCode.equals(roomCode, ignoreCase = true)) {
+                                viewModel.initiateBleHandshake(discoveryManager, peer) {}
                             }
                         }
                     }
                 }
-            }
-            ConnectionType.ONLINE -> {
-                val serverClient = KtorSignalingClient(
-                    host = signalingServerHost, 
-                    port = com.tej.protojunc.signalingServerPort,
-                    roomCode = roomCode, 
-                    deviceName = com.tej.protojunc.deviceName
-                )
-                orchestrator.setSignalingClient(serverClient)
-                orchestrator.startCall(isHost)
-            }
-            ConnectionType.XMPP -> {
-                val xmppClient = XmppSignalingClient(jid = "user@example.com")
-                orchestrator.setSignalingClient(xmppClient)
-                // If it's a message only, we skip peer connection creation inside startCall for now or handle it.
-                orchestrator.startCall(isHost, mode = selectedXmppMode ?: SignalingMessage.Type.VIDEO_CALL)
-            }
-            ConnectionType.QR -> {
-                sessionManager.createPeerConnection()
-                if (isHost) {
-                    viewModel.prepareInvite {}
-                }
-            }
-            else -> {
-                Logger.w { "ConnectionType $connectionType logic not implemented" }
             }
         }
     }
@@ -333,9 +339,9 @@ fun VideoCallScreen(
                         else -> Icons.Default.Refresh
                     }
                     val color = when (connectionState) {
-                        WebRtcState.Connected -> Color.Green
-                        WebRtcState.Failed -> Color.Red
-                        else -> Color.Yellow
+                        WebRtcState.Connected -> MaterialTheme.colorScheme.tertiary
+                        WebRtcState.Failed -> MaterialTheme.colorScheme.error
+                        else -> MaterialTheme.colorScheme.secondary
                     }
                     
                                     Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
@@ -356,9 +362,9 @@ fun VideoCallScreen(
                     if (connectionType == ConnectionType.ONLINE || connectionType == ConnectionType.XMPP) {
                         VerticalDivider(modifier = Modifier.height(16.dp).padding(horizontal = 8.dp), color = Color.Gray)
                         val sigColor = when(signalingState) {
-                            SignalingState.CONNECTED -> Color.Green
-                            SignalingState.CONNECTING -> Color.Yellow
-                            SignalingState.ERROR -> Color.Red
+                            SignalingState.CONNECTED -> MaterialTheme.colorScheme.tertiary
+                            SignalingState.CONNECTING -> MaterialTheme.colorScheme.secondary
+                            SignalingState.ERROR -> MaterialTheme.colorScheme.error
                             else -> Color.Gray
                         }
                         Box(modifier = Modifier.size(8.dp).background(sigColor, androidx.compose.foundation.shape.CircleShape))
@@ -404,8 +410,8 @@ fun VideoCallScreen(
             if (connectionState == WebRtcState.Failed || connectionState == WebRtcState.Closed) {
                 FloatingActionButton(
                     onClick = reconnect,
-                    containerColor = Color.Yellow,
-                    contentColor = Color.Black
+                    containerColor = MaterialTheme.colorScheme.secondary,
+                    contentColor = MaterialTheme.colorScheme.onSecondary
                 ) {
                     Icon(Icons.Default.Refresh, "Reconnect")
                 }
@@ -418,8 +424,8 @@ fun VideoCallScreen(
                         onEndCall()
                     }
                 },
-                containerColor = Color.Red,
-                contentColor = Color.White
+                containerColor = MaterialTheme.colorScheme.error,
+                contentColor = MaterialTheme.colorScheme.onError
             ) {
                 Icon(Icons.Default.Call, "End Call")
             }

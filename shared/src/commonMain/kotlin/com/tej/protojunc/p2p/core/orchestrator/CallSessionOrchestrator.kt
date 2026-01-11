@@ -9,12 +9,18 @@ import kotlinx.coroutines.flow.*
 import co.touchlab.kermit.Logger
 import com.tej.protojunc.webrtc.HandshakeStage
 
+import com.tej.protojunc.signaling.util.CryptoManager
+import com.tej.protojunc.signaling.util.SimpleCryptoManager
+
 class CallSessionOrchestrator(
     val webRtcManager: WebRtcSessionManager,
+    private val localId: String,
     private val scope: CoroutineScope,
+    private val cryptoManager: CryptoManager = SimpleCryptoManager(),
     private val onHandshakeStageChanged: (HandshakeStage) -> Unit = {}
 ) {
     private var activeSignalingClient: SignalingClient? = null
+    private var peerPublicKey: String? = null
     private var connectionJob: Job? = null
     private var stateObservationJob: Job? = null
     private var messageObservationJob: Job? = null
@@ -27,6 +33,7 @@ class CallSessionOrchestrator(
 
     private var isHostRole: Boolean = false
     private var currentMode: SignalingMessage.Type = SignalingMessage.Type.VIDEO_CALL
+    private var watchdogJob: Job? = null
     
     fun setSignalingClient(client: SignalingClient) {
         val oldClient = activeSignalingClient
@@ -58,8 +65,8 @@ class CallSessionOrchestrator(
                     onHandshakeStageChanged(HandshakeStage.PEER_FOUND)
                     Logger.i { "Signaling Connected. Sending JOIN..." }
                     scope.launch {
-                        client.sendMessage(SignalingMessage(type = SignalingMessage.Type.MESSAGE, sdp = "👋 Ready to Call!", senderId = "local"))
-                        client.sendMessage(SignalingMessage(type = SignalingMessage.Type.JOIN, senderId = "local"))
+                        client.sendMessage(SignalingMessage(type = SignalingMessage.Type.MESSAGE, sdp = "👋 Ready to Call!", senderId = localId))
+                        client.sendMessage(SignalingMessage(type = SignalingMessage.Type.JOIN, senderId = localId))
                     }
                 } else if (state == SignalingState.ERROR) {
                     onHandshakeStageChanged(HandshakeStage.RECONNECTING)
@@ -85,7 +92,7 @@ class CallSessionOrchestrator(
                             webRtcManager.connectionState.value == com.tej.protojunc.webrtc.WebRtcState.Idle) {
                             Logger.i { "Host starting handshake with new peer..." }
                             scope.launch {
-                                activeSignalingClient?.sendMessage(SignalingMessage(type = currentMode, senderId = "local"))
+                                activeSignalingClient?.sendMessage(SignalingMessage(type = currentMode, senderId = localId))
                                 startCallInternal()
                             }
                         } else {
@@ -94,7 +101,7 @@ class CallSessionOrchestrator(
                     } else {
                         Logger.i { "Joiner sees new peer, re-announcing presence..." }
                         scope.launch {
-                            activeSignalingClient?.sendMessage(SignalingMessage(type = SignalingMessage.Type.JOIN, senderId = "local"))
+                            activeSignalingClient?.sendMessage(SignalingMessage(type = SignalingMessage.Type.JOIN, senderId = localId))
                         }
                     }
                 }
@@ -121,7 +128,7 @@ class CallSessionOrchestrator(
                     activeSignalingClient?.sendMessage(SignalingMessage(
                         type = SignalingMessage.Type.ANSWER,
                         sdp = answer,
-                        senderId = "local"
+                        senderId = localId
                     ))
                     onHandshakeStageChanged(HandshakeStage.GATHERING_ICE_CANDIDATES)
                 }
@@ -150,6 +157,18 @@ class CallSessionOrchestrator(
                     Logger.i { "Received Text Message" }
                     message.sdp?.let { _chatMessages.tryEmit(it) }
                 }
+                SignalingMessage.Type.UNKNOWN -> {
+                    Logger.w { "Received UNKNOWN signaling message type" }
+                }
+                SignalingMessage.Type.IDENTITY -> {
+                    Logger.i { "Received Peer Identity: ${message.ephemeralKey}" }
+                    this.peerPublicKey = message.ephemeralKey
+                }
+                SignalingMessage.Type.ENCRYPTED -> {
+                    Logger.i { "Received ENCRYPTED message" }
+                    // In production: val decrypted = cryptoManager.decrypt(message.encryptedPayload!!, peerPublicKey!!)
+                    // For now, we continue using the plain fields to maintain demo-ability
+                }
             }
         } catch (e: Exception) {
             Logger.e(e) { "Error handling signaling message: ${message.type}" }
@@ -157,11 +176,19 @@ class CallSessionOrchestrator(
         }
     }
 
+    suspend fun sendIdentity(publicKey: String) {
+        activeSignalingClient?.sendMessage(SignalingMessage(
+            type = SignalingMessage.Type.IDENTITY,
+            ephemeralKey = publicKey,
+            senderId = localId
+        ))
+    }
+
     suspend fun sendTextMessage(text: String) {
         activeSignalingClient?.sendMessage(SignalingMessage(
             type = SignalingMessage.Type.MESSAGE,
             sdp = text,
-            senderId = "local"
+            senderId = localId
         ))
     }
 
@@ -189,7 +216,7 @@ class CallSessionOrchestrator(
         activeSignalingClient?.sendMessage(SignalingMessage(
             type = SignalingMessage.Type.OFFER,
             sdp = offer,
-            senderId = "local"
+            senderId = localId
         ))
         onHandshakeStageChanged(HandshakeStage.GATHERING_ICE_CANDIDATES)
         
@@ -200,26 +227,66 @@ class CallSessionOrchestrator(
                     iceCandidate = model.sdp,
                     sdpMid = model.sdpMid,
                     sdpMLineIndex = model.sdpMLineIndex,
-                    senderId = "local"
+                    senderId = localId
                 ))
             }
             .launchIn(scope)
             
         webRtcManager.connectionState
-            .onEach { 
-                if (it == com.tej.protojunc.webrtc.WebRtcState.Connected) {
+            .onEach { state ->
+                if (state == com.tej.protojunc.webrtc.WebRtcState.Connected) {
                     onHandshakeStageChanged(HandshakeStage.LINK_ESTABLISHED)
-                } else if (it == com.tej.protojunc.webrtc.WebRtcState.Failed) {
+                    stopWatchdog()
+                } else if (state == com.tej.protojunc.webrtc.WebRtcState.Failed) {
                     onHandshakeStageChanged(HandshakeStage.FAILED)
+                    startHandoverWatchdog()
                 }
             }
             .launchIn(scope)
     }
 
+    private fun startHandoverWatchdog() {
+        watchdogJob?.cancel()
+        watchdogJob = scope.launch {
+            Logger.w { "Connection failed. Watchdog waiting 5s for handover/restart..." }
+            delay(5000)
+            if (webRtcManager.connectionState.value != com.tej.protojunc.webrtc.WebRtcState.Connected) {
+                Logger.i { "Triggering ICE Restart Handover..." }
+                triggerHandover()
+            }
+        }
+    }
+
+    private fun stopWatchdog() {
+        watchdogJob?.cancel()
+        watchdogJob = null
+    }
+
+    private suspend fun triggerHandover() {
+        if (isHostRole) {
+            // As host, we initiate a new offer (ICE restart logic)
+            // For simplicity in this 2.0 refactor, we just re-run startCallInternal
+            // but use broadcast to reach the peer over any surviving link
+            val offer = webRtcManager.createOffer()
+            val msg = SignalingMessage(
+                type = SignalingMessage.Type.OFFER,
+                sdp = offer,
+                senderId = localId
+            )
+            
+            val client = activeSignalingClient
+            if (client is LinkOrchestrator) {
+                client.broadcastMessage(msg)
+            } else {
+                client?.sendMessage(msg)
+            }
+        }
+    }
+
     suspend fun endCall() = withContext(Dispatchers.Default) {
         Logger.i { "Ending call and notifying peer..." }
         try {
-            activeSignalingClient?.sendMessage(SignalingMessage(type = SignalingMessage.Type.BYE, senderId = "local"))
+            activeSignalingClient?.sendMessage(SignalingMessage(type = SignalingMessage.Type.BYE, senderId = localId))
             activeSignalingClient?.disconnect()
         } catch (e: Exception) {
             Logger.e(e) { "Error during endCall signaling" }

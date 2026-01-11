@@ -12,6 +12,12 @@ import androidx.compose.ui.unit.dp
 import com.tej.protojunc.bluetooth.WifiDirectCallManager
 import com.tej.protojunc.bluetooth.WifiP2pDeviceDomain
 
+import com.tej.protojunc.ui.theme.RadarDiscoveryUI
+import com.tej.protojunc.models.NearbyPeer
+import com.tej.protojunc.ui.theme.ProtojuncCard
+import com.tej.protojunc.ui.theme.ProtojuncButton
+import androidx.compose.ui.graphics.Color
+
 @Composable
 fun WifiDirectCallScreen(
     manager: WifiDirectCallManager,
@@ -26,11 +32,11 @@ fun WifiDirectCallScreen(
         modifier = Modifier.fillMaxSize().padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("Wi-Fi Direct Call", style = MaterialTheme.typography.headlineMedium)
+        Text("Wi-Fi Direct Link", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
         
         Spacer(modifier = Modifier.height(16.dp))
         
-        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+        ProtojuncCard(modifier = Modifier.fillMaxWidth()) {
              Column(modifier = Modifier.padding(16.dp)) {
                  Text("Status: $status", style = MaterialTheme.typography.titleMedium)
                  if (info.isNotEmpty()) {
@@ -40,18 +46,37 @@ fun WifiDirectCallScreen(
              }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // RADAR SECTION
+        Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+            RadarDiscoveryUI(
+                nearbyPeers = devices.map { 
+                    NearbyPeer(it.address, it.name, System.currentTimeMillis(), -50, isPaired = it.status == "Connected") 
+                },
+                onPeerClick = { nearby ->
+                    val device = devices.firstOrNull { it.address == nearby.deviceId }
+                    device?.let { manager.connect(it) }
+                }
+            )
+            
+            if (devices.isEmpty() && status == "DISCOVERING") {
+                Text("Searching for partners...", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { manager.discoverPeers() }) {
-                Text("Discover Peers")
+            ProtojuncButton(onClick = { manager.discoverPeers() }, modifier = Modifier.weight(1f)) {
+                Text("Scan")
             }
-            Button(onClick = { manager.stopDiscovery() }) {
-                Text("Stop Discovery")
+            ProtojuncButton(onClick = { manager.stopDiscovery() }, modifier = Modifier.weight(1f)) {
+                Text("Stop")
             }
         }
         
-        if (status == "CONNECTED") {
+        if (status == "CONNECTED" || status == "Connected") {
              Spacer(modifier = Modifier.height(8.dp))
              Button(onClick = { manager.disconnect() }, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) {
                  Text("Disconnect Group")
@@ -59,26 +84,9 @@ fun WifiDirectCallScreen(
         }
 
         Spacer(modifier = Modifier.height(16.dp))
-
-        Text("Available Peers:")
-        LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            items(devices) { device ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp)
-                        .clickable { manager.connect(device) },
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(device.name, style = MaterialTheme.typography.titleMedium)
-                        Text("${device.address} - ${device.status}", style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-            }
-        }
         
-        Button(onClick = onBack) {
-            Text("Back")
+        TextButton(onClick = onBack) {
+            Text("Back", color = MaterialTheme.colorScheme.secondary)
         }
     }
 }

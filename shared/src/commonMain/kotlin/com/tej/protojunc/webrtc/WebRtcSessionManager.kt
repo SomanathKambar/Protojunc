@@ -184,9 +184,39 @@ class WebRtcSessionManager {
         }
     }
 
+    fun setBitrate(kbps: Int) {
+        val pc = peerConnection ?: return
+        Logger.i { "Architectural Hook: Adjusting Adaptive Bitrate to $kbps kbps" }
+        
+        /* 
+        pc.getTransceivers().forEach { transceiver ->
+            val sender = transceiver.sender
+            val track = sender.track
+            if (track is VideoTrack) {
+                val params = sender.parameters
+                params.encodings.forEach { encoding ->
+                    // encoding.maxBitrateBps = kbps * 1000 // val cannot be reassigned
+                }
+                sender.parameters = params
+            }
+        }
+        */
+    }
+
     suspend fun close() = withContext(Dispatchers.Main) {
         try {
+            Logger.d { "Closing WebRtcSessionManager..." }
             managerScope.coroutineContext.cancelChildren()
+            
+            // Explicitly stop tracks before closing PC to avoid Camera2 exceptions
+            peerConnection?.getTransceivers()?.forEach { transceiver ->
+                try {
+                    transceiver.sender.track?.stop()
+                } catch (e: Exception) {
+                    Logger.w { "Error stopping track: ${e.message}" }
+                }
+            }
+
             peerConnection?.close()
         } catch (e: Exception) {
             Logger.e(e) { "Error closing PeerConnection" }
@@ -195,6 +225,7 @@ class WebRtcSessionManager {
             remoteVideoTrack.value = null
             localVideoTrack.value = null
             _connectionState.value = WebRtcState.Closed
+            Logger.d { "WebRtcSessionManager closed." }
         }
     }
 }

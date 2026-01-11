@@ -6,13 +6,12 @@ import io.ktor.http.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.encodeToString
 import co.touchlab.kermit.Logger
 // We will need to inject the host or pass it in since Platform.kt is in shared
 // For now, let's keep it as is and we'll fix the host issue by passing it from the caller.
 
 import io.ktor.client.plugins.logging.*
+import com.tej.protojunc.signaling.util.SignalingEncoder
 
 class KtorSignalingClient(
     private val host: String,
@@ -70,7 +69,7 @@ class KtorSignalingClient(
                             if (frame is Frame.Text) {
                                 val text = frame.readText()
                                 try {
-                                    val message = Json.decodeFromString<SignalingMessage>(text)
+                                    val message = SignalingEncoder.decode(text)
                                     _messages.emit(message)
                                 } catch (e: Exception) {
                                     Logger.e { "Signaling Decode Error: ${e.message}" }
@@ -101,8 +100,12 @@ class KtorSignalingClient(
     }
 
     override suspend fun sendMessage(message: SignalingMessage) {
-        val text = Json.encodeToString(message)
-        session?.send(Frame.Text(text)) ?: co.touchlab.kermit.Logger.w { "Cannot send message, no active session" }
+        try {
+            val text = SignalingEncoder.encode(message)
+            session?.send(Frame.Text(text)) ?: co.touchlab.kermit.Logger.w { "Cannot send message, no active session" }
+        } catch (e: Exception) {
+            Logger.e { "Signaling Encode Error: ${e.message}" }
+        }
     }
 
     override suspend fun disconnect() {

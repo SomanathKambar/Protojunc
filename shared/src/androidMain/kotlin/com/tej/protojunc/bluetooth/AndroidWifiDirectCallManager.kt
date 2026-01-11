@@ -12,6 +12,7 @@ import android.net.wifi.p2p.WifiP2pManager.Channel
 import android.os.Looper
 import android.media.AudioRecord
 import android.media.AudioTrack
+import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -50,6 +51,7 @@ class AndroidWifiDirectCallManager(
                             WifiP2pDeviceDomain(it.deviceName, it.deviceAddress, getStatusString(it.status))
                         }
                         _devices.value = list
+                        Logger.d { "P2P Peers Discovered: ${list.size}" }
                     }
                 }
                 WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION -> {
@@ -90,9 +92,18 @@ class AndroidWifiDirectCallManager(
         manager?.discoverPeers(channel, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
                 _status.value = "DISCOVERING"
+                Logger.d { "P2P Discovery Started" }
+                // Force a peer request to clear old cache
+                manager?.requestPeers(channel) { peers ->
+                    val list = peers.deviceList.map {
+                        WifiP2pDeviceDomain(it.deviceName, it.deviceAddress, getStatusString(it.status))
+                    }
+                    _devices.value = list
+                }
             }
             override fun onFailure(reason: Int) {
                 _status.value = "DISCOVERY_FAILED: $reason"
+                Logger.e { "P2P Discovery Failed: $reason" }
             }
         })
     }

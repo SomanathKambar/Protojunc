@@ -30,6 +30,9 @@ dependencyResolutionManagement {
 
 include(":composeApp")
 include(":shared")
-include(":server")
-include(":core:signaling")
 include(":core:common")
+include(":core:signaling")
+include(":server")
+include(":feature:vault")
+include(":core:ui")
+include(":core:models")

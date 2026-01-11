@@ -18,8 +18,11 @@ kotlin {
         commonMain.dependencies {
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kermit)
+            api(libs.androidx.datastore.preferences)
             implementation("io.ktor:ktor-client-core:2.3.12")
-            implementation("io.ktor:ktor-client-cio:2.3.12")
+        }
+        androidMain.dependencies {
+            implementation(libs.androidx.core.ktx)
         }
     }
 }

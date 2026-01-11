@@ -8,6 +8,7 @@ import android.os.ParcelUuid
 import android.content.Context
 import co.touchlab.kermit.Logger
 import java.util.UUID
+import com.tej.protojunc.models.NearbyPeer
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -120,6 +121,7 @@ class AndroidPeripheralAdvertiser(
             .addServiceData(ParcelUuid(SERVICE_UUID), roomCode.toByteArray())
             .build()
 
+        Logger.d { "Starting BLE Mesh Signaling for Room: $roomCode" }
         bluetoothAdapter.bluetoothLeAdvertiser?.startAdvertising(settings, data, scanResponse, object : AdvertiseCallback() {
             override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
                 Logger.d { "BLE Advertising Started for Room: $roomCode" }

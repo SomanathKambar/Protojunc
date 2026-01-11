@@ -17,9 +17,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
 
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyRow
+import com.tej.protojunc.models.NearbyPeer
+import com.tej.protojunc.ui.theme.ProtojuncCard
+import com.tej.protojunc.ui.theme.ProtojuncButton
+import com.tej.protojunc.ui.theme.ProtojuncStatusIndicator
+
 @Composable
 fun HomeScreen(
+    nearbyPeers: List<NearbyPeer> = emptyList(),
     onModeSelected: (ConnectionType, Boolean) -> Unit, // Boolean true = Host, false = Joiner
+    onVaultClick: () -> Unit = {},
     serverStatus: Boolean = false,
     processing: Boolean = false,
     onUpdateConfig: (String, Int) -> Unit = { _, _ -> }
@@ -36,11 +45,11 @@ fun HomeScreen(
             horizontalArrangement = Arrangement.End
         ) {
             IconButton(onClick = { showSettings = true }) {
-                Icon(Icons.Default.Settings, "Settings")
+                Icon(Icons.Default.Settings, "Settings", tint = MaterialTheme.colorScheme.primary)
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(
                 painter = androidx.compose.ui.res.painterResource(id = com.tej.protojunc.R.drawable.ic_launcher_foreground),
@@ -50,21 +59,72 @@ fun HomeScreen(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Protojunc", style = MaterialTheme.typography.displayMedium, color = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(8.dp))
-                Box(
-                    modifier = Modifier
-                        .size(12.dp)
-                        .background(if (serverStatus) Color.Green else Color.Red, CircleShape)
+                Text(
+                    "Protojunc", 
+                    style = MaterialTheme.typography.headlineLarge, 
+                    color = MaterialTheme.colorScheme.primary
                 )
+                Spacer(Modifier.width(12.dp))
+                ProtojuncStatusIndicator(isActive = serverStatus)
             }
         }
-        Text("Universal P2P Video Calls", style = MaterialTheme.typography.bodyLarge)
-        if (!serverStatus) {
-            Text("Signaling Server Offline", color = Color.Red, style = MaterialTheme.typography.labelSmall)
-        }
+        Text("Universal P2P Communication", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.secondary)
         
         Spacer(modifier = Modifier.height(24.dp))
+
+        // Nearby Contacts Section (New in 2.0)
+        if (nearbyPeers.isNotEmpty()) {
+            Text(
+                "NEARBY CONTACTS", 
+                modifier = Modifier.fillMaxWidth(), 
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.tertiary
+            )
+            Spacer(Modifier.height(12.dp))
+            LazyRow(
+                modifier = Modifier.fillMaxWidth().height(100.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                items(nearbyPeers) { peer ->
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.width(70.dp)
+                    ) {
+                        Surface(
+                            modifier = Modifier.size(56.dp),
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            border = androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.tertiary)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    peer.displayName.take(1).uppercase(),
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            peer.displayName,
+                            style = MaterialTheme.typography.labelSmall,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+
+        Text(
+            "COMMUNICATION MODES", 
+            modifier = Modifier.fillMaxWidth(), 
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.secondary
+        )
+        Spacer(Modifier.height(12.dp))
 
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
@@ -110,6 +170,22 @@ fun HomeScreen(
                     subtitle = "Enterprise Jingle",
                     icon = Icons.Default.Lock,
                     onClick = { showRoleDialog = ConnectionType.XMPP }
+                )
+            }
+            item {
+                ModeCard(
+                    title = "Mesh Link",
+                    subtitle = "Decentralized Group",
+                    icon = Icons.Default.Groups,
+                    onClick = { onModeSelected(ConnectionType.MESH, true) }
+                )
+            }
+            item {
+                ModeCard(
+                    title = "File Vault",
+                    subtitle = "Secure P2P Sharing",
+                    icon = Icons.Default.FolderZip,
+                    onClick = onVaultClick
                 )
             }
             item {
@@ -166,21 +242,31 @@ fun HomeScreen(
     }
 
     if (showRoleDialog != null) {
+        val isMesh = showRoleDialog == ConnectionType.MESH
         AlertDialog(
             onDismissRequest = { showRoleDialog = null },
-            title = { Text("Choose Role") },
-            text = { Text("Would you like to Start a new call (Host) or Join an existing one?") },
+            title = { Text(if (isMesh) "Mesh Group" else "Choose Role") },
+            text = { 
+                Text(
+                    if (isMesh) "Would you like to Create a decentralized group or Join one nearby?"
+                    else "Would you like to Start a new call (Host) or Join an existing one?"
+                ) 
+            },
             confirmButton = {
                 Button(onClick = { 
                     onModeSelected(showRoleDialog!!, true)
                     showRoleDialog = null
-                }) { Text("Start Call") }
+                }) { 
+                    Text(if (isMesh) "Create Group" else "Start Call") 
+                }
             },
             dismissButton = {
                 TextButton(onClick = { 
                     onModeSelected(showRoleDialog!!, false)
                     showRoleDialog = null
-                }) { Text("Join Call") }
+                }) { 
+                    Text(if (isMesh) "Join Group" else "Join Call") 
+                }
             }
         )
     }

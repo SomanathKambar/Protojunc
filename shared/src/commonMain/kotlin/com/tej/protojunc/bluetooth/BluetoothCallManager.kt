@@ -4,7 +4,8 @@ import kotlinx.coroutines.flow.StateFlow
 
 data class BluetoothDeviceDomain(
     val name: String,
-    val address: String
+    val address: String,
+    val isPaired: Boolean = false
 )
 
 enum class BluetoothCallStatus {

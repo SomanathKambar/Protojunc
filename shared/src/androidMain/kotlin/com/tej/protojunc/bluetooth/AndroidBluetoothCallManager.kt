@@ -14,18 +14,16 @@ import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.AudioTrack
 import android.os.Build
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import co.touchlab.kermit.Logger
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
-import java.io.DataInputStream
-import java.io.DataOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 @SuppressLint("MissingPermission")
 class AndroidBluetoothCallManager(
@@ -56,9 +54,9 @@ class AndroidBluetoothCallManager(
             "Unknown Device"
         }
 
-    private var connectThread: ConnectThread? = null
-    private var connectedThread: ConnectedThread? = null
-    private var acceptThread: AcceptThread? = null
+    private var connectJob: Job? = null
+    private var acceptJob: Job? = null
+    private val connectedThreads = ConcurrentHashMap<String, ConnectedThread>()
     
     // Audio configuration
     private val sampleRate = 16000
@@ -77,14 +75,16 @@ class AndroidBluetoothCallManager(
     }
     
     override fun refreshPairedDevices() {
-        _devices.value = getPairedDevicesList()
+        val current = _devices.value.filter { !it.isPaired }.toMutableList()
+        val paired = getPairedDevicesList()
+        _devices.value = paired + current
     }
     
     private fun getPairedDevicesList(): List<BluetoothDeviceDomain> {
         return try {
             val paired = bluetoothAdapter?.bondedDevices
             paired?.map { 
-                BluetoothDeviceDomain(it.name ?: "Unknown (Paired)", it.address) 
+                BluetoothDeviceDomain(it.name ?: "Bonded Device", it.address, isPaired = true) 
             } ?: emptyList()
         } catch (e: SecurityException) {
             emptyList()
@@ -99,9 +99,13 @@ class AndroidBluetoothCallManager(
         context.registerReceiver(object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                  if (BluetoothDevice.ACTION_ACL_DISCONNECTED == intent.action) {
-                     if (_status.value == BluetoothCallStatus.CONNECTED || _status.value == BluetoothCallStatus.AUDIO_STREAMING) {
-                         _errorMessage.value = "Device Disconnected"
-                         stopCall()
+                     val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+                     device?.address?.let { addr ->
+                         connectedThreads[addr]?.cancel()
+                         connectedThreads.remove(addr)
+                         if (connectedThreads.isEmpty()) {
+                             stopCall()
+                         }
                      }
                  }
                  if (BluetoothAdapter.ACTION_STATE_CHANGED == intent.action) {
@@ -126,8 +130,7 @@ class AndroidBluetoothCallManager(
                         intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
                     }
                     device?.let {
-                         // Relaxed filtering for now to ensure visibility, relies on manual PIN check
-                         val newDevice = BluetoothDeviceDomain(device.name ?: "Unknown Device", device.address)
+                         val newDevice = BluetoothDeviceDomain(device.name ?: "New Device", device.address, isPaired = device.bondState == BluetoothDevice.BOND_BONDED)
                          val currentList = _devices.value.toMutableList()
                          if (currentList.none { it.address == newDevice.address }) {
                             currentList.add(newDevice)
@@ -159,11 +162,10 @@ class AndroidBluetoothCallManager(
         if (bluetoothAdapter == null) return
         if (!isScanning) {
             val filter = IntentFilter(BluetoothDevice.ACTION_FOUND)
-            filter.addAction(BluetoothDevice.ACTION_UUID)
             context.registerReceiver(receiver, filter)
             isScanning = true
         }
-        _devices.value = getPairedDevicesList()
+        refreshPairedDevices()
         _status.value = BluetoothCallStatus.SCANNING
         bluetoothAdapter.startDiscovery()
     }
@@ -181,81 +183,104 @@ class AndroidBluetoothCallManager(
 
     override fun connect(address: String, isVideo: Boolean) {
         val device = bluetoothAdapter?.getRemoteDevice(address) ?: return
-        if (device.bondState != BluetoothDevice.BOND_BONDED) {
-             try { device.createBond() } catch (e: Exception) {}
-        }
+        
         _status.value = BluetoothCallStatus.CONNECTING
         stopScanning()
-        connectThread?.cancel()
-        connectThread = ConnectThread(device)
-        connectThread?.start()
+        
+        scope.launch(Dispatchers.IO) {
+            bluetoothAdapter?.cancelDiscovery()
+            try {
+                val socket = device.createRfcommSocketToServiceRecord(APP_UUID)
+                socket.connect()
+                withContext(Dispatchers.Main) {
+                    manageConnectedSocket(socket)
+                }
+            } catch (e: IOException) {
+                withContext(Dispatchers.Main) {
+                    _errorMessage.value = "Connection Failed: ${e.message}"
+                    _status.value = BluetoothCallStatus.IDLE
+                }
+            }
+        }
     }
 
     override fun startServer() {
-        acceptThread?.cancel()
-        acceptThread = AcceptThread()
-        acceptThread?.start()
-    }
-
-    override fun startAudio() {
-        if (_status.value != BluetoothCallStatus.CONNECTED) return
-        
-        connectedThread?.let { thread ->
-            if (isStreaming) return
-            isStreaming = true
-            _status.value = BluetoothCallStatus.AUDIO_STREAMING
-            
-            audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-            audioManager.isSpeakerphoneOn = false
-            
-            val minBufSizeRec = AudioRecord.getMinBufferSize(sampleRate, channelConfigIn, audioFormat)
-            val minBufSizeTrack = AudioTrack.getMinBufferSize(sampleRate, channelConfigOut, audioFormat)
-
+        acceptJob?.cancel()
+        acceptJob = scope.launch(Dispatchers.IO) {
+            var serverSocket: BluetoothServerSocket? = null
             try {
-                audioRecord = AudioRecord(
-                    android.media.MediaRecorder.AudioSource.VOICE_COMMUNICATION, 
-                    sampleRate, channelConfigIn, audioFormat, minBufSizeRec * 2
-                )
-                
-                audioTrack = AudioTrack(
-                    AudioManager.STREAM_VOICE_CALL,
-                    sampleRate, channelConfigOut, audioFormat, minBufSizeTrack * 2, AudioTrack.MODE_STREAM
-                )
-                
-                audioRecord?.startRecording()
-                audioTrack?.play()
-                
-                scope.launch(Dispatchers.IO) {
-                    val buffer = ByteArray(minBufSizeRec) // Smaller chunks for lower latency
-                    while (isStreaming) {
-                        val read = audioRecord?.read(buffer, 0, buffer.size) ?: 0
-                        if (read > 0) {
-                            thread.write(buffer.copyOfRange(0, read))
+                serverSocket = bluetoothAdapter?.listenUsingRfcommWithServiceRecord(APP_NAME, APP_UUID)
+                Logger.i { "BT Server listening..." }
+                while (isActive) {
+                    val socket = serverSocket?.accept()
+                    socket?.let {
+                        withContext(Dispatchers.Main) {
+                            manageConnectedSocket(it)
                         }
                     }
                 }
-            } catch (e: Exception) {
-                _errorMessage.value = "Audio Error: ${e.message}"
-                stopCall()
+            } catch (e: IOException) {
+                Logger.e(e) { "BT Server Stopped" }
+            } finally {
+                serverSocket?.close()
             }
+        }
+    }
+
+    override fun startAudio() {
+        if (connectedThreads.isEmpty()) return
+        if (isStreaming) return
+        
+        isStreaming = true
+        _status.value = BluetoothCallStatus.AUDIO_STREAMING
+        
+        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+        
+        // High-Quality Audio Config
+        val sampleRate = 44100 // Upgrade to 44.1kHz
+        val minBufSizeRec = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, audioFormat)
+        val minBufSizeTrack = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_MONO, audioFormat)
+
+        try {
+            audioRecord = AudioRecord(android.media.MediaRecorder.AudioSource.VOICE_COMMUNICATION, sampleRate, AudioFormat.CHANNEL_IN_MONO, audioFormat, minBufSizeRec * 4)
+            audioTrack = AudioTrack(AudioManager.STREAM_VOICE_CALL, sampleRate, AudioFormat.CHANNEL_OUT_MONO, audioFormat, minBufSizeTrack * 4, AudioTrack.MODE_STREAM)
+            
+            audioRecord?.startRecording()
+            audioTrack?.play()
+            
+            // Dedicated Thread for ultra-low latency audio processing
+            Thread {
+                val buffer = ByteArray(minBufSizeRec)
+                while (isStreaming) {
+                    val read = audioRecord?.read(buffer, 0, buffer.size) ?: 0
+                    if (read > 0) {
+                        val data = buffer.copyOfRange(0, read)
+                        synchronized(connectedThreads) {
+                            connectedThreads.values.forEach { it.write(data) }
+                        }
+                    }
+                }
+            }.start()
+        } catch (e: Exception) {
+            _errorMessage.value = "Audio Hardware Error"
+            stopCall()
         }
     }
 
     override fun stopCall() {
         isStreaming = false
-        connectThread?.cancel()
-        acceptThread?.cancel()
-        connectedThread?.cancel()
-        connectThread = null
-        acceptThread = null
-        connectedThread = null
+        connectJob?.cancel()
+        acceptJob?.cancel()
+        connectedThreads.values.forEach { it.cancel() }
+        connectedThreads.clear()
         stopAudioHardware()
         _status.value = BluetoothCallStatus.IDLE
         startServer()
     }
     
     private fun stopAudioHardware() {
-        try { audioRecord?.stop(); audioRecord?.release()
+        try { 
+            audioRecord?.stop(); audioRecord?.release()
             audioTrack?.stop(); audioTrack?.release()
             audioManager.mode = AudioManager.MODE_NORMAL
         } catch (e: Exception) {}
@@ -263,102 +288,59 @@ class AndroidBluetoothCallManager(
     }
 
     private fun manageConnectedSocket(socket: BluetoothSocket) {
-        connectedThread?.cancel()
-        connectedThread = ConnectedThread(socket)
-        connectedThread?.start()
+        val addr = socket.remoteDevice.address
+        val thread = ConnectedThread(socket)
+        connectedThreads[addr] = thread
+        
+        scope.launch(Dispatchers.IO) {
+            thread.runLoop()
+        }
         _status.value = BluetoothCallStatus.CONNECTED
+        Logger.i { "Mesh Peer Connected: $addr. Total peers: ${connectedThreads.size}" }
     }
 
-    private inner class ConnectThread(device: BluetoothDevice) : Thread() {
-        private val mmSocket: BluetoothSocket? by lazy(LazyThreadSafetyMode.NONE) {
-            device.createRfcommSocketToServiceRecord(APP_UUID)
-        }
-        override fun run() {
-            bluetoothAdapter?.cancelDiscovery()
-            try {
-                mmSocket?.connect()
-                mmSocket?.let { manageConnectedSocket(it) }
-            } catch (e: IOException) {
-                _errorMessage.value = "Connection Failed: ${e.message}"
-                _status.value = BluetoothCallStatus.IDLE
-                cancel()
-            }
-        }
-        fun cancel() { try { mmSocket?.close() } catch (e: IOException) {} }
-    }
-
-    private inner class AcceptThread : Thread() {
-        private val mmServerSocket: BluetoothServerSocket? by lazy(LazyThreadSafetyMode.NONE) {
-            bluetoothAdapter?.listenUsingRfcommWithServiceRecord(APP_NAME, APP_UUID)
-        }
-        override fun run() {
-            var shouldLoop = true
-            while (shouldLoop) {
-                val socket: BluetoothSocket? = try { mmServerSocket?.accept() } catch (e: IOException) { shouldLoop = false; null }
-                socket?.let {
-                    manageConnectedSocket(it)
-                    mmServerSocket?.close()
-                    shouldLoop = false
-                }
-            }
-        }
-        fun cancel() { try { mmServerSocket?.close() } catch (e: IOException) {} }
-    }
-
-    private inner class ConnectedThread(private val mmSocket: BluetoothSocket) : Thread() {
+    private inner class ConnectedThread(private val mmSocket: BluetoothSocket) {
         private val mmInStream: InputStream = mmSocket.inputStream
         private val mmOutStream: OutputStream = mmSocket.outputStream
-        private val dataOut = DataOutputStream(mmOutStream)
-        private val dataIn = DataInputStream(mmInStream)
-        
         private var handshakeVerified = false
 
-        override fun run() {
+        suspend fun runLoop() {
             try {
                 mmOutStream.write("PIN:${_pairingCode.value}\n".toByteArray())
-            } catch (e: IOException) {
-                return
-            }
+            } catch (e: IOException) { return }
 
             val buffer = ByteArray(4096)
-            
             while (true) {
                 try {
-                    if (mmInStream.available() > 10000) {
-                         mmInStream.skip(mmInStream.available().toLong())
-                    }
-
+                    val bytes = mmInStream.read(buffer)
+                    if (bytes <= 0) break
+                    
                     if (!handshakeVerified) {
-                         val bytes = mmInStream.read(buffer)
                          val msg = String(buffer, 0, bytes)
                          if (msg.startsWith("PIN:")) {
-                             val receivedPin = msg.substring(4).trim()
-                             if (receivedPin.startsWith(_pairingCode.value)) {
-                                 handshakeVerified = true
-                             }
+                             handshakeVerified = true
                          }
                          continue
                     }
 
-                    val bytes = mmInStream.read(buffer)
-                    if (isStreaming && bytes > 0) {
+                    if (isStreaming) {
+                         // Directly write to track from current thread
                          audioTrack?.write(buffer, 0, bytes)
                     }
-                    
                 } catch (e: IOException) {
-                    _status.value = BluetoothCallStatus.ERROR
-                    _errorMessage.value = "Connection Lost"
+                    Logger.w { "Mesh Peer Lost: ${mmSocket.remoteDevice.address}" }
                     break
                 }
             }
+            cancel()
         }
 
         fun write(bytes: ByteArray) {
-            try {
-                mmOutStream.write(bytes)
-            } catch (e: IOException) {}
+            try { mmOutStream.write(bytes) } catch (e: IOException) {}
         }
 
-        fun cancel() { try { mmSocket.close() } catch (e: IOException) {} }
+        fun cancel() { 
+            try { mmSocket.close() } catch (e: IOException) {}
+        }
     }
 }

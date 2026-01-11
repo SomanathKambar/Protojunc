@@ -19,8 +19,11 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
+            api(project(":core:models"))
             implementation(libs.kotlinx.serialization.json)
+            implementation(libs.kotlinx.serialization.protobuf)
             implementation(libs.kotlinx.coroutines.core)
+            implementation(libs.okio)
             implementation(libs.kermit)
             implementation("io.ktor:ktor-client-core:2.3.12")
             implementation("io.ktor:ktor-client-websockets:2.3.12")

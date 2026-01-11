@@ -1,5 +1,7 @@
+package com.tej.protojunc.state
 
-import com.tej.protojunc.util.SignalingEncoder
+import com.tej.protojunc.signaling.util.SignalingEncoder
+import com.tej.protojunc.signaling.SignalingMessage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,7 +21,7 @@ sealed class ConnectionState {
     data class Failed(val error: String) : ConnectionState()
 }
 
-class ConnectionViewModel {
+class ConnectionStateMachine {
     private val _state = MutableStateFlow<ConnectionState>(ConnectionState.Idle)
     val state: StateFlow<ConnectionState> = _state.asStateFlow()
 
@@ -37,7 +39,7 @@ class ConnectionViewModel {
 
     private fun processPayload(base64: String) {
         try {
-            val payload = SignalingEncoder.decode(base64)
+            val message = SignalingEncoder.decode(base64)
             _state.value = ConnectionState.Connecting
         } catch (e: Exception) {
             _state.value = ConnectionState.Failed("Invalid Signaling Data")

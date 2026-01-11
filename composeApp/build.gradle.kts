@@ -38,6 +38,8 @@ kotlin {
             implementation(libs.androidx.lifecycle.runtimeCompose)
             implementation(libs.kermit)
             implementation(projects.shared)
+            implementation(project(":feature:vault"))
+            implementation(project(":core:ui"))
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

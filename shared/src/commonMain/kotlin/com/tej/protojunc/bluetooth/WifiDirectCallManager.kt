@@ -5,7 +5,8 @@ import kotlinx.coroutines.flow.StateFlow
 data class WifiP2pDeviceDomain(
     val name: String,
     val address: String,
-    val status: String
+    val status: String,
+    val rssi: Int = -50 // P2P doesn't give raw RSSI easily, using default for distance mapping
 )
 
 interface WifiDirectCallManager {

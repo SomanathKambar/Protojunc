@@ -37,6 +37,10 @@ import com.tej.protojunc.discovery.KableDiscoveryManager
 import com.tej.protojunc.discovery.PeerDiscovered
 import kotlinx.coroutines.launch
 
+import com.tej.protojunc.ui.theme.RadarDiscoveryUI
+import com.tej.protojunc.models.NearbyPeer
+import androidx.compose.ui.graphics.Color
+
 @Composable
 fun InviteBleScreen(
     localOfferSdp: String?,
@@ -151,16 +155,26 @@ fun JoinBleScreen(
             Text("Searching for Room: $roomCode", color = MaterialTheme.colorScheme.primary)
         }
         
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(16.dp))
         
-        Box(contentAlignment = Alignment.Center) {
-            RadarScanView()
-            if (peers.isEmpty()) {
-                Text("Searching...", style = MaterialTheme.typography.bodySmall)
+        RadarDiscoveryUI(
+            nearbyPeers = peers.map { 
+                NearbyPeer(it.id, it.name, System.currentTimeMillis(), it.rssi) 
+            },
+            onPeerClick = { nearby ->
+                val peer = peers.firstOrNull { it.id == nearby.deviceId }
+                peer?.let {
+                    if (!isConnecting) {
+                        isConnecting = true
+                        onPeerSelected(it)
+                    }
+                }
             }
-        }
+        )
 
-        Spacer(modifier = Modifier.height(32.dp))
+        if (peers.isEmpty()) {
+            Text("Searching for signals...", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+        }
         
         if (error != null) {
             Text(error!!, color = MaterialTheme.colorScheme.error)

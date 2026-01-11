@@ -5,19 +5,23 @@ package com.tej.protojunc.p2p.signaling.protocol;
 option java_package = "com.tej.protojunc.p2p.signaling.protocol";
 option java_multiple_files = true;
 
-message HandshakeMessage {
+message SignalingPayload {
   enum Type {
     UNKNOWN = 0;
-    OFFER = 1;
-    ANSWER = 2;
-    ICE_CANDIDATE = 3;
-    BYE = 4;
+    JOIN = 1;
+    OFFER = 2;
+    ANSWER = 3;
+    ICE_CANDIDATE = 4;
+    BYE = 5;
+    MESSAGE = 6;
+    VOICE_CALL = 7;
+    VIDEO_CALL = 8;
   }
   
   Type type = 1;
   string sdp = 2;
-  string candidate = 3;
+  string ice_candidate = 3;
   string sdp_mid = 4;
   int32 sdp_m_line_index = 5;
-  string device_id = 6;
+  string sender_id = 6;
 }

@@ -1,7 +1,6 @@
-package com.tej.protojunc.util
+package com.tej.protojunc.signaling.util
 
-import com.tej.protojunc.models.SignalingPayload
-import com.tej.protojunc.models.IceCandidateModel
+import com.tej.protojunc.signaling.SignalingMessage
 
 object SdpMinifier {
     
@@ -108,28 +107,27 @@ object SdpMinifier {
     }
 
     /**
-     * Converts a raw SDP string into an encoded SignalingPayload string.
+     * Converts a raw SDP string into an encoded SignalingMessage string.
      */
-    fun encodePayload(sdp: String, type: String): String {
+    fun encodePayload(sdp: String, type: SignalingMessage.Type, senderId: String): String {
         val minified = minify(sdp)
-        val payload = SignalingPayload(
+        val message = SignalingMessage(
             sdp = minified,
             type = type,
-            iceCandidates = emptyList(),
-            timestamp = 0
+            senderId = senderId
         )
-        return SignalingEncoder.encode(payload)
+        return SignalingEncoder.encode(message)
     }
 
     /**
-     * Decodes an encoded SignalingPayload string back into a raw SDP.
+     * Decodes an encoded SignalingMessage string back into a raw SDP.
      */
-    fun decodePayload(encoded: String): Pair<String, String> {
+    fun decodePayload(encoded: String): Pair<String, SignalingMessage.Type> {
         return try {
-            val payload = SignalingEncoder.decode(encoded)
-            expand(payload.sdp) to payload.type
+            val message = SignalingEncoder.decode(encoded)
+            expand(message.sdp ?: "") to message.type
         } catch (e: Exception) {
-            "DECODE_ERROR" to "UNKNOWN"
+            "DECODE_ERROR" to SignalingMessage.Type.UNKNOWN
         }
     }
 }
