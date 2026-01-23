@@ -41,6 +41,9 @@ import com.tej.protojunc.discovery.DiscoveryManager
 import com.tej.protojunc.p2p.core.discovery.ConnectionType
 import com.tej.protojunc.bluetooth.AndroidBluetoothCallManager
 import com.tej.protojunc.bluetooth.AndroidWifiDirectCallManager
+import com.tej.protojunc.bluetooth.BluetoothMeshManager
+import com.tej.protojunc.bluetooth.AndroidGattServer
+import com.tej.protojunc.bluetooth.AndroidPairedDeviceRepository
 import com.tej.protojunc.ui.bluetooth.BluetoothCallScreen
 import com.tej.protojunc.ui.wifi.WifiDirectCallScreen
 import com.tej.protojunc.vault.FileVaultScreen
@@ -49,6 +52,7 @@ import com.tej.protojunc.p2p.core.orchestrator.MeshCoordinator
 import com.tej.protojunc.p2p.core.orchestrator.LinkOrchestrator
 import com.tej.protojunc.p2p.core.orchestrator.TransportPriority
 import com.tej.protojunc.ui.theme.ProtojuncTheme
+import com.juul.kable.peripheral
 
 @Composable
 fun App() {
@@ -64,6 +68,7 @@ fun App() {
     val progressMessage by viewModel.progressMessage.collectAsState()
     val serverStatus by viewModel.serverStatus.collectAsState()
     val nearbyPeers by viewModel.nearbyPeers.collectAsState()
+    val userIdentity by viewModel.userIdentity.collectAsState()
     
     var isNavigating by remember { mutableStateOf(false) }
     var showCancelDialog by remember { mutableStateOf(false) }
@@ -78,37 +83,49 @@ fun App() {
     val discoveryManager: DiscoveryManager = remember { KableDiscoveryManager(advertiser) }
     val bluetoothCallManager = remember { AndroidBluetoothCallManager(context, scope) }
     val wifiDirectCallManager = remember { AndroidWifiDirectCallManager(context, scope) }
+    val pairedDeviceRepository = remember { AndroidPairedDeviceRepository(context) }
+    
+    val gattServer = remember { AndroidGattServer(context) }
+    val localId = userIdentity?.deviceId ?: "unknown_device"
+    
+    // UI State for Advertising
+    val isAdvertising by advertiser.advertisingState.collectAsState(false)
+    var bluetoothError by remember { mutableStateOf<String?>(null) }
+    
+    val meshManager = remember(localId) {
+        BluetoothMeshManager(
+            localId = localId,
+            scope = scope,
+            gattServer = gattServer,
+            startAdvertising = { uuid -> 
+                try {
+                    advertiser.startAdvertising(roomCode, uuid, "") 
+                } catch (e: Exception) {
+                    bluetoothError = "Failed to start advertising: ${e.message}"
+                }
+            },
+            stopAdvertising = { advertiser.stopAdvertising() },
+            peripheralBuilder = { macAddress ->
+                try {
+                    scope.peripheral(macAddress)
+                } catch (e: Exception) {
+                    null
+                }
+            }
+        )
+    }
+
     val linkOrchestrator: LinkOrchestrator = remember { 
         LinkOrchestrator(scope) { transport: TransportPriority, bitrate: Int ->
             viewModel.sessionManager.setBitrate(bitrate)
-        } 
-    }
-
-    // Reset navigation lock after a timeout as a safety measure
-    LaunchedEffect(isNavigating) {
-        if (isNavigating) {
-            kotlinx.coroutines.delay(5000)
-            isNavigating = false
+        }.apply {
+            addTransport(TransportPriority.BLE, meshManager)
         }
     }
 
-    // Auto-start presence if permissions are already granted
-    LaunchedEffect(Unit) {
-        val required = mutableListOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            required.add(Manifest.permission.BLUETOOTH_SCAN)
-            required.add(Manifest.permission.BLUETOOTH_ADVERTISE)
-            required.add(Manifest.permission.BLUETOOTH_CONNECT)
-        } else {
-            required.add(Manifest.permission.ACCESS_FINE_LOCATION)
-        }
-        
-        val allGranted = required.all {
-            androidx.core.content.ContextCompat.checkSelfPermission(context, it) == android.content.pm.PackageManager.PERMISSION_GRANTED
-        }
-        
-        if (allGranted && bluetoothManager.adapter.isEnabled) {
-            viewModel.presenceManager.startPresence()
+    DisposableEffect(Unit) {
+        onDispose {
+            wifiDirectCallManager.release()
         }
     }
 
@@ -165,6 +182,34 @@ fun App() {
             isNavigating = true
             pendingBluetoothAction = onGranted
             permissionLauncher.launch(required.toTypedArray())
+        }
+    }
+
+    // Reset navigation lock after a timeout as a safety measure
+    LaunchedEffect(isNavigating) {
+        if (isNavigating) {
+            kotlinx.coroutines.delay(5000)
+            isNavigating = false
+        }
+    }
+
+    // Auto-start presence if permissions are already granted
+    LaunchedEffect(Unit) {
+        val required = mutableListOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            required.add(Manifest.permission.BLUETOOTH_SCAN)
+            required.add(Manifest.permission.BLUETOOTH_ADVERTISE)
+            required.add(Manifest.permission.BLUETOOTH_CONNECT)
+        } else {
+            required.add(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+        
+        val allGranted = required.all {
+            androidx.core.content.ContextCompat.checkSelfPermission(context, it) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+        
+        if (allGranted && bluetoothManager.adapter.isEnabled) {
+            viewModel.presenceManager.startPresence()
         }
     }
 
@@ -387,34 +432,54 @@ fun App() {
                                     isHost = isHost,
                                     scope = scope,
                                     signalingClient = linkOrchestrator,
-                                    discoveryManager = discoveryManager
+                                    discoveryManager = discoveryManager,
+                                    pairedDeviceRepository = pairedDeviceRepository,
+                                    onManualConnect = { address ->
+                                        meshManager.connectToDevice(address)
+                                    }
                                 )
                             }
                             MeshCallScreen(
                                 coordinator = meshCoordinator,
                                 nearbyPeers = nearbyPeers,
+                                localId = localId,
+                                isAdvertising = isAdvertising,
+                                error = bluetoothError,
+                                onDismissError = { bluetoothError = null },
+                                onToggleAdvertising = {
+                                    scope.launch {
+                                        try {
+                                            if (isAdvertising) {
+                                                advertiser.stopAdvertising()
+                                            } else {
+                                                advertiser.startAdvertising(roomCode, "550e8400-e29b-41d4-a716-446655440000", "")
+                                            }
+                                        } catch (e: Exception) {
+                                            bluetoothError = "Bluetooth Error: ${e.message}"
+                                        }
+                                    }
+                                },
                                 checkAndRequestBluetooth = { checkAndRequestBluetooth(it) },
                                 onLeave = { navController.popBackStack(Screen.Home.name, false) }
                             )
                         }
                     }
 
-                    composable(Screen.InviteBle.name) {
-                        InviteBleScreen(
-                            localOfferSdp = localSdp,
-                            roomCode = roomCode,
-                            onAnswerReceived = { answer ->
-                                viewModel.handleAnswerScanned(answer) {
-                                    navController.navigate(Screen.VideoCall.name)
-                                }
-                            },
-                            onBack = { 
-                                viewModel.cancel()
-                                navController.popBackStack() 
-                            }
-                        )
-                    }
-
+                                        composable(Screen.InviteBle.name) {
+                                            InviteBleScreen(
+                                                localOfferSdp = localSdp,
+                                                roomCode = roomCode,
+                                                onAnswerReceived = { answer ->
+                                                    viewModel.handleAnswerScanned(answer) {
+                                                        navController.navigate(Screen.VideoCall.name)
+                                                    }
+                                                },
+                                                onBack = { 
+                                                    viewModel.cancel()
+                                                    navController.popBackStack() 
+                                                }
+                                            )
+                                        }
                     composable(Screen.JoinBle.name) {
                          JoinBleScreen(
                              discoveryManager = discoveryManager,

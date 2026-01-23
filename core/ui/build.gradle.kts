@@ -24,12 +24,17 @@ kotlin {
             implementation(compose.ui)
             implementation(compose.materialIconsExtended)
         }
+        androidMain.dependencies {
+             implementation("io.reactivex.rxjava3:rxjava:3.1.6")
+             implementation("io.reactivex.rxjava3:rxandroid:3.0.2")
+             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-rx2:1.8.0")
+        }
     }
 }
 
 android {
     namespace = "com.tej.protojunc.core.ui"
-    compileSdk = 34
+    compileSdk = libs.versions.android.compileSdk.get().toInt()
     defaultConfig {
         minSdk = 24
     }

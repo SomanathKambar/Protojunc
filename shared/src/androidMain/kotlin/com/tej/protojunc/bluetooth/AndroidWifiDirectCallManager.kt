@@ -131,6 +131,14 @@ class AndroidWifiDirectCallManager(
         manager?.removeGroup(channel, null)
     }
 
+    override fun release() {
+        try {
+            context.unregisterReceiver(receiver)
+        } catch (e: Exception) {
+            // Already unregistered
+        }
+    }
+
     override fun startSocketServer() {
         scope.launch(Dispatchers.IO) {
             try {

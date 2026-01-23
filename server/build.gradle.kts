@@ -15,7 +15,7 @@ application {
 
 dependencies {
 
-    implementation(project(":core:signaling"))
+    implementation(project(":core:models"))
 
     implementation(libs.logback)
 

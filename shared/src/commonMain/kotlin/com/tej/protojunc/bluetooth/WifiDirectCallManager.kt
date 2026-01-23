@@ -23,4 +23,5 @@ interface WifiDirectCallManager {
     // Once connected via P2P, we use sockets
     fun startSocketServer()
     fun connectToSocketServer(ip: String)
+    fun release()
 }

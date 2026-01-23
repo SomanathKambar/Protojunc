@@ -1,23 +1,33 @@
 package com.tej.protojunc
 
-import io.ktor.server.application.*
-import io.ktor.server.engine.*
-import io.ktor.server.netty.*
-import io.ktor.server.plugins.statuspages.*
-import io.ktor.server.routing.*
-import io.ktor.server.response.*
-import io.ktor.server.websocket.*
-import io.ktor.websocket.*
-import java.util.*
-import java.util.concurrent.ConcurrentHashMap
+import io.ktor.server.application.Application
+import io.ktor.server.application.install
+import io.ktor.server.engine.embeddedServer
+import io.ktor.server.netty.Netty
+import io.ktor.server.response.respondText
+import io.ktor.server.routing.get
+import io.ktor.server.routing.route
+import io.ktor.server.routing.routing
+import io.ktor.server.websocket.DefaultWebSocketServerSession
+import io.ktor.server.websocket.WebSockets
+import io.ktor.server.websocket.pingPeriod
+import io.ktor.server.websocket.timeout
+import io.ktor.server.websocket.webSocket
+import io.ktor.websocket.Frame
+import io.ktor.websocket.readText
+import io.ktor.websocket.send
+import java.net.InetAddress
 import java.text.SimpleDateFormat
-import kotlin.time.Duration
-import kotlin.time.DurationUnit
-import kotlin.time.toDuration
-
+import java.util.Collections
+import java.util.Date
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import javax.jmdns.JmDNS
 import javax.jmdns.ServiceInfo
-import java.net.InetAddress
+import kotlin.time.DurationUnit
+import kotlin.time.toDuration
+import com.tej.protojunc.core.models.SignalingMessage
+import kotlinx.serialization.json.Json
 
 fun startDiscovery() {
     try {
@@ -158,8 +168,17 @@ fun Application.module() {
                     for (frame in incoming) {
                         if (frame is Frame.Text) {
                             val text = frame.readText()
-                            session.lastMessage = text.take(50)
-                            logEvent("Msg from $peerId: ${text.take(20)}...")
+                            
+                            // Try to parse to validate it's a valid protocol message
+                            try {
+                                val message = Json.decodeFromString<SignalingMessage>(text)
+                                session.lastMessage = "${message.type}..."
+                                logEvent("Msg from $peerId: ${message.type}")
+                            } catch (e: Exception) {
+                                logEvent("Msg from $peerId: (Raw Text)")
+                                session.lastMessage = text.take(20)
+                            }
+                            
                             val targets = roomPeers.filter { it.id != peerId }
                             targets.forEach { target ->
                                 try {

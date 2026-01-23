@@ -99,7 +99,7 @@ class AndroidPresenceScanner(
                     
                     discoveredPeers.tryEmit(
                         NearbyPeer(
-                            deviceId = idPart,
+                            deviceId = result.device.address,
                             displayName = namePart,
                             lastSeen = System.currentTimeMillis(),
                             rssi = result.rssi,

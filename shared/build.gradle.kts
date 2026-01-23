@@ -45,7 +45,7 @@ kotlin {
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.kotlinx.serialization.protobuf)
             implementation(libs.kotlinx.coroutines.core)
-            implementation(libs.kable)
+            api(libs.kable)
             api(libs.webrtc)
             implementation(libs.kermit)
             implementation(libs.protobuf.kotlin)
@@ -58,6 +58,8 @@ kotlin {
             implementation("io.ktor:ktor-client-cio:2.3.12")
             implementation("io.ktor:ktor-client-content-negotiation:2.3.12")
             implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.12")
+            implementation(libs.androidx.lifecycle.viewmodelCompose)
+            implementation(libs.koin.core)
         }
         androidMain.dependencies {
             implementation(libs.webrtc.kmp.android)

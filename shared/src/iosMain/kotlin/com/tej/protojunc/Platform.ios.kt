@@ -12,3 +12,5 @@ actual fun getPlatform(): Platform = IOSPlatform()
 actual var signalingServerHost: String = "localhost"
 actual var signalingServerPort: Int = 8080
 actual val deviceName: String = UIDevice.currentDevice.name
+
+actual fun getCurrentTimeMillis(): Long = (NSDate().timeIntervalSince1970 * 1000).toLong()

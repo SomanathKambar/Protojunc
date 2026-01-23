@@ -37,7 +37,7 @@ kotlin {
 
 android {
     namespace = "com.tej.protojunc.feature.vault"
-    compileSdk = 34
+    compileSdk = libs.versions.android.compileSdk.get().toInt()
     defaultConfig {
         minSdk = 24
     }

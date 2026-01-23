@@ -37,9 +37,15 @@ import android.content.Context
 
 import com.tej.protojunc.vault.FileTransferManager
 import com.tej.protojunc.vault.AndroidFileTransferManager
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
+import com.tej.protojunc.core.signaling.webrtc.SignalingManager
+import com.tej.protojunc.core.models.SignalingMessage as ServerSignalingMessage
+import com.tej.protojunc.models.IceCandidateModel
 
-class ConnectionViewModel(application: Application) : AndroidViewModel(application) {
+class ConnectionViewModel(application: Application) : AndroidViewModel(application), KoinComponent {
     val sessionManager = WebRtcSessionManager()
+    private val signalingManager: SignalingManager by inject()
     
     val identityManager: IdentityManager = DataStoreIdentityManager(createDataStore(application))
     private val _userIdentity = MutableStateFlow<UserIdentity?>(null)
@@ -68,6 +74,93 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
         serverDiscovery.startDiscovery()
         loadIdentity()
         startFileServer()
+        
+        // Start Signaling over WebSocket Server
+        viewModelScope.launch {
+            try {
+                signalingManager.connect()
+                
+                // Listen for incoming signaling
+                launch {
+                    signalingManager.incomingMessages.collect { msg ->
+                        handleSignalingMessage(msg)
+                    }
+                }
+                
+                // Listen for local candidates to send to server
+                launch {
+                    sessionManager.iceCandidates.collect { candidate ->
+                        signalingManager.send(
+                            ServerSignalingMessage(
+                                type = "candidate",
+                                candidate = candidate.sdp,
+                                sdpMid = candidate.sdpMid,
+                                sdpMLineIndex = candidate.sdpMLineIndex
+                            )
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                Logger.e(e) { "Signaling Server Init Failed" }
+            }
+        }
+    }
+
+    private suspend fun handleSignalingMessage(message: ServerSignalingMessage) {
+        try {
+            when (message.type) {
+                "offer" -> {
+                    Logger.i { "Received Remote Offer via Server" }
+                    sessionManager.createPeerConnection()
+                    sessionManager.handleRemoteDescription(message.sdp!!, SessionDescriptionType.Offer)
+                    val answer = sessionManager.createAnswer()
+                    if (answer != null) {
+                        signalingManager.send(ServerSignalingMessage(type = "answer", sdp = answer))
+                    }
+                    _handshakeStage.value = HandshakeStage.COMPLETED
+                }
+                "answer" -> {
+                    Logger.i { "Received Remote Answer via Server" }
+                    sessionManager.handleRemoteDescription(message.sdp!!, SessionDescriptionType.Answer)
+                    _handshakeStage.value = HandshakeStage.COMPLETED
+                }
+                "candidate" -> {
+                    if (message.candidate != null && message.sdpMLineIndex != null) {
+                        Logger.d { "Received Remote ICE Candidate via Server" }
+                        sessionManager.addIceCandidate(
+                            IceCandidateModel(
+                                sdp = message.candidate!!,
+                                sdpMid = message.sdpMid,
+                                sdpMLineIndex = message.sdpMLineIndex!!
+                            )
+                        )
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Logger.e(e) { "Signaling Handle Error" }
+        }
+    }
+
+    /**
+     * Initiates a WebRTC call using the centralized Signaling Server.
+     */
+    fun startOnlineCall() {
+        viewModelScope.launch {
+            try {
+                Logger.i { "Initiating Online Call..." }
+                _handshakeStage.value = HandshakeStage.INITIALIZING_HARDWARE
+                sessionManager.createPeerConnection()
+                val offer = sessionManager.createOffer()
+                if (offer != null) {
+                    signalingManager.send(ServerSignalingMessage(type = "offer", sdp = offer))
+                    _handshakeStage.value = HandshakeStage.EXCHANGING_SDP_OFFER
+                }
+            } catch (e: Exception) {
+                Logger.e(e) { "Start Online Call Error" }
+                _handshakeStage.value = HandshakeStage.FAILED
+            }
+        }
     }
 
     private fun startFileServer() {
@@ -99,6 +192,7 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
             while (true) {
                 try {
                     val isRunning = healthCheck.isServerRunning()
+                    Logger.d { "Server Health Check: $isRunning" }
                     if (_serverStatus.value && !isRunning) {
                         // Server went down while we were potentially using it
                         if (_handshakeStage.value != HandshakeStage.IDLE && 

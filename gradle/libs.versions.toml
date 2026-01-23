@@ -76,6 +76,16 @@ androidx-camera-camera2 = { module = "androidx.camera:camera-camera2", version.r
 androidx-camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }
 androidx-camera-view = { module = "androidx.camera:camera-view", version.ref = "camerax" }
 
+# DI
+koin-core = { module = "io.insert-koin:koin-core", version = "4.0.0" }
+koin-android = { module = "io.insert-koin:koin-android", version = "4.0.0" }
+koin-compose = { module = "io.insert-koin:koin-compose", version = "4.0.0" }
+
+# XMPP
+smack-android = { module = "org.igniterealtime.smack:smack-android", version = "4.4.8" }
+smack-tcp = { module = "org.igniterealtime.smack:smack-tcp", version = "4.4.8" }
+smack-im = { module = "org.igniterealtime.smack:smack-im", version = "4.4.8" }
+
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }
 androidLibrary = { id = "com.android.library", version.ref = "agp" }

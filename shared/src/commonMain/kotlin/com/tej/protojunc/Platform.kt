@@ -10,3 +10,5 @@ expect fun getPlatform(): Platform
 expect var signalingServerHost: String
 expect var signalingServerPort: Int
 expect val deviceName: String
+
+expect fun getCurrentTimeMillis(): Long

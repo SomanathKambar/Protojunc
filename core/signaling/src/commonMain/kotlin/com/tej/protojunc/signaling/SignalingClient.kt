@@ -15,7 +15,8 @@ data class SignalingMessage(
     @ProtoNumber(5) val sdpMLineIndex: Int? = null,
     @ProtoNumber(6) val senderId: String,
     @ProtoNumber(7) val encryptedPayload: ByteArray? = null,
-    @ProtoNumber(8) val ephemeralKey: String? = null
+    @ProtoNumber(8) val ephemeralKey: String? = null,
+    @ProtoNumber(9) val payload: String? = null
 ) {
     @Serializable
     enum class Type { 

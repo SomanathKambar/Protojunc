@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidLibrary)
+    alias(libs.plugins.kotlinSerialization)
 }
 
 kotlin {
@@ -17,6 +18,7 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(libs.kotlinx.coroutines.core)
+            implementation(libs.kotlinx.serialization.json)
             implementation(libs.kermit)
             api(libs.androidx.datastore.preferences)
             implementation("io.ktor:ktor-client-core:2.3.12")
@@ -29,7 +31,7 @@ kotlin {
 
 android {
     namespace = "com.tej.protojunc.core.common"
-    compileSdk = 34
+    compileSdk = libs.versions.android.compileSdk.get().toInt()
     defaultConfig {
         minSdk = 24
     }

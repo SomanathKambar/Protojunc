@@ -142,11 +142,13 @@ class WebRtcSessionManager {
             pc.setLocalDescription(offer)
             
             var attempts = 0
-            while (pc.iceGatheringState != IceGatheringState.Complete && attempts < 20) {
+            while (attempts < 20) {
+                val currentPc = peerConnection ?: break
+                if (currentPc.iceGatheringState == IceGatheringState.Complete) break
                 delay(100)
                 attempts++
             }
-            pc.localDescription?.sdp
+            peerConnection?.localDescription?.sdp
         } catch (e: Exception) {
             Logger.e(e) { "Error creating offer" }
             _errorMessage.value = "Offer Error: ${e.message}"
@@ -172,11 +174,13 @@ class WebRtcSessionManager {
             pc.setLocalDescription(answer)
             
             var attempts = 0
-            while (pc.iceGatheringState != IceGatheringState.Complete && attempts < 20) {
+            while (attempts < 20) {
+                val currentPc = peerConnection ?: break
+                if (currentPc.iceGatheringState == IceGatheringState.Complete) break
                 delay(100)
                 attempts++
             }
-            pc.localDescription?.sdp
+            peerConnection?.localDescription?.sdp
         } catch (e: Exception) {
             Logger.e(e) { "Error creating answer" }
             _errorMessage.value = "Answer Error: ${e.message}"
@@ -208,16 +212,22 @@ class WebRtcSessionManager {
             Logger.d { "Closing WebRtcSessionManager..." }
             managerScope.coroutineContext.cancelChildren()
             
-            // Explicitly stop tracks before closing PC to avoid Camera2 exceptions
-            peerConnection?.getTransceivers()?.forEach { transceiver ->
-                try {
-                    transceiver.sender.track?.stop()
-                } catch (e: Exception) {
-                    Logger.w { "Error stopping track: ${e.message}" }
+            // Capture peerConnection instance to avoid race conditions
+            val pc = peerConnection
+            if (pc != null) {
+                // Explicitly stop tracks before closing PC to avoid Camera2 exceptions
+                pc.getTransceivers().forEach { transceiver ->
+                    try {
+                        val track = transceiver.sender.track
+                        if (track != null) {
+                            track.stop()
+                        }
+                    } catch (e: Exception) {
+                        Logger.w { "Error stopping track: ${e.message}" }
+                    }
                 }
+                pc.close()
             }
-
-            peerConnection?.close()
         } catch (e: Exception) {
             Logger.e(e) { "Error closing PeerConnection" }
         } finally {

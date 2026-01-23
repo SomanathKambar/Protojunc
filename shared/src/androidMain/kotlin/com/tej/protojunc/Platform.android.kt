@@ -12,3 +12,5 @@ actual fun getPlatform(): Platform = AndroidPlatform()
 actual var signalingServerHost: String = "10.0.2.2"
 actual var signalingServerPort: Int = 8080
 actual val deviceName: String = Build.MODEL
+
+actual fun getCurrentTimeMillis(): Long = System.currentTimeMillis()
