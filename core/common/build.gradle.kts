@@ -21,7 +21,7 @@ kotlin {
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.kermit)
             api(libs.androidx.datastore.preferences)
-            implementation("io.ktor:ktor-client-core:2.3.12")
+            implementation(libs.ktor.client.core)
         }
         androidMain.dependencies {
             implementation(libs.androidx.core.ktx)
@@ -34,5 +34,9 @@ android {
     compileSdk = libs.versions.android.compileSdk.get().toInt()
     defaultConfig {
         minSdk = 24
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 }

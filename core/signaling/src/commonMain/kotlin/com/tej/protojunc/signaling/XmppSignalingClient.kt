@@ -3,10 +3,10 @@ package com.tej.protojunc.signaling
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import co.touchlab.kermit.Logger
+import com.tej.protojunc.core.models.SignalingMessage
 
 /**
  * XMPP Implementation of the Signaling Client.
- * This provides the architectural hooks for Jingle-based (XEP-0166) signaling.
  */
 class XmppSignalingClient(
     private val jid: String,
@@ -21,16 +21,12 @@ class XmppSignalingClient(
 
     override suspend fun connect() {
         _state.value = SignalingState.CONNECTING
-        // Implementation would use an XMPP library like Smack (Android) or similar KMP library
-        // to establish a persistent TCP connection to the XMPP server.
-        delay(1000) // Simulate connection
+        delay(1000)
         _state.value = SignalingState.CONNECTED
         Logger.d { "XMPP Connected as $jid" }
     }
 
     override suspend fun sendMessage(message: SignalingMessage) {
-        // Here we would wrap the SignalingMessage into an XMPP <iq> or <message> stanza
-        // following the Jingle protocol format.
         Logger.d { "Sending XMPP Jingle Message: ${message.type}" }
     }
 

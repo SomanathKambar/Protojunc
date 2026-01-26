@@ -1,6 +1,7 @@
 package com.tej.protojunc.signaling.util
 
-import com.tej.protojunc.signaling.SignalingMessage
+import com.tej.protojunc.core.models.SignalingMessage
+import com.tej.protojunc.signaling.util.SignalingEncoder
 
 object SdpMinifier {
     

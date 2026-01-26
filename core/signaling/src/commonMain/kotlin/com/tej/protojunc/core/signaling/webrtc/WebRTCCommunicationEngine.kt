@@ -5,7 +5,6 @@ import com.tej.protojunc.core.models.SignalingMessage
 import com.tej.protojunc.core.signaling.CommunicationEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -20,7 +19,7 @@ import kotlinx.coroutines.flow.onEach
  */
 class WebRTCCommunicationEngine(
     private val signalingManager: SignalingManager,
-    private val coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.IO)
+    private val coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Default)
 ) : CommunicationEngine {
 
     private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Idle)
@@ -64,8 +63,8 @@ class WebRTCCommunicationEngine(
                     coroutineScope.launch {
                         signalingManager.send(
                             SignalingMessage(
-                                type = "candidate",
-                                candidate = candidate.candidate,
+                                type = SignalingMessage.Type.ICE_CANDIDATE,
+                                iceCandidate = candidate.candidate,
                                 sdpMid = candidate.sdpMid,
                                 sdpMLineIndex = candidate.sdpMLineIndex
                             )
@@ -102,7 +101,7 @@ class WebRTCCommunicationEngine(
             try {
                 val offer = pc.createOffer(OfferAnswerOptions())
                 pc.setLocalDescription(offer)
-                signalingManager.send(SignalingMessage(type = "offer", sdp = offer.sdp))
+                signalingManager.send(SignalingMessage(type = SignalingMessage.Type.OFFER, sdp = offer.sdp))
             } catch (e: Exception) {
                 Logger.e(e) { "Failed to create offer" }
             }
@@ -112,25 +111,28 @@ class WebRTCCommunicationEngine(
     private suspend fun handleSignalingMessage(message: SignalingMessage) {
         try {
             when (message.type) {
-                "offer" -> {
+                SignalingMessage.Type.OFFER -> {
                     peerConnection?.let { pc ->
                         pc.setRemoteDescription(SessionDescription(SessionDescriptionType.Offer, message.sdp!!))
                         val answer = pc.createAnswer(OfferAnswerOptions())
                         pc.setLocalDescription(answer)
-                        signalingManager.send(SignalingMessage(type = "answer", sdp = answer.sdp))
+                        signalingManager.send(SignalingMessage(type = SignalingMessage.Type.ANSWER, sdp = answer.sdp))
                     }
                 }
-                "answer" -> {
+                SignalingMessage.Type.ANSWER -> {
                     peerConnection?.setRemoteDescription(SessionDescription(SessionDescriptionType.Answer, message.sdp!!))
                 }
-                "candidate" -> {
+                SignalingMessage.Type.ICE_CANDIDATE -> {
                     peerConnection?.addIceCandidate(
                         IceCandidate(
                             sdpMid = message.sdpMid ?: "",
                             sdpMLineIndex = message.sdpMLineIndex ?: 0,
-                            candidate = message.candidate!!
+                            candidate = message.iceCandidate!!
                         )
                     )
+                }
+                else -> {
+                    Logger.d { "Unhandled signaling message type: ${message.type}" }
                 }
             }
         } catch (e: Exception) {

@@ -29,6 +29,7 @@ fun HomeScreen(
     nearbyPeers: List<NearbyPeer> = emptyList(),
     onModeSelected: (ConnectionType, Boolean) -> Unit, // Boolean true = Host, false = Joiner
     onVaultClick: () -> Unit = {},
+    onDashboardClick: () -> Unit = {},
     serverStatus: Boolean = false,
     processing: Boolean = false,
     onUpdateConfig: (String, Int) -> Unit = { _, _ -> }
@@ -186,6 +187,14 @@ fun HomeScreen(
                     subtitle = "Secure P2P Sharing",
                     icon = Icons.Default.FolderZip,
                     onClick = onVaultClick
+                )
+            }
+            item {
+                ModeCard(
+                    title = "Dashboard",
+                    subtitle = "Live Clinical Ops",
+                    icon = Icons.Default.MonitorHeart,
+                    onClick = onDashboardClick
                 )
             }
             item {

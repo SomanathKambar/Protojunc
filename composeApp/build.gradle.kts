@@ -25,7 +25,13 @@ kotlin {
             implementation(libs.androidx.camera.camera2)
             implementation(libs.androidx.camera.lifecycle)
             implementation(libs.androidx.camera.view)
+            implementation(libs.androidx.work.runtime.ktx)
             implementation(libs.koin.android)
+            implementation(libs.koin.compose)
+            implementation(libs.ktor.client.core)
+            implementation(libs.ktor.client.cio)
+            implementation(libs.ktor.client.content.negotiation)
+            implementation(libs.ktor.serialization.kotlinx.json)
         }
         commonMain.dependencies {
             implementation(compose.runtime)

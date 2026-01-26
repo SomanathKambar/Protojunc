@@ -9,5 +9,6 @@ plugins {
     alias(libs.plugins.kotlinMultiplatform) apply false
     alias(libs.plugins.ktor) apply false
     alias(libs.plugins.kotlinSerialization) apply false
-    kotlin("native.cocoapods") version "2.2.20" apply false
+    alias(libs.plugins.ksp) apply false
+    kotlin("native.cocoapods") version "2.1.0" apply false
 }

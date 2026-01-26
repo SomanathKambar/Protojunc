@@ -25,6 +25,7 @@ import com.tej.protojunc.p2p.core.orchestrator.CallSessionOrchestrator
 import com.tej.protojunc.p2p.core.orchestrator.LinkOrchestrator
 import com.tej.protojunc.p2p.core.orchestrator.TransportPriority
 import com.tej.protojunc.signaling.*
+import com.tej.protojunc.core.models.SignalingMessage
 import com.tej.protojunc.signalingServerHost
 import com.tej.protojunc.deviceName
 import kotlinx.coroutines.launch
@@ -197,7 +198,7 @@ fun VideoCallScreen(
         )
     }
 
-    val reconnect = {
+    val reconnect = { 
         retryTrigger++
         viewModel.clearError()
         sessionManager.reset()
@@ -289,7 +290,7 @@ fun VideoCallScreen(
                         if (localSdp == null) "Starting session..." else "Waiting for partner to join..."
                     } else {
                         if (handshakeStage == HandshakeStage.IDLE) "Connecting to partner..."
-                        else "Joining: ${handshakeStage.name.replace("_", " ")}"
+                        else "Joining: ${handshakeStage.name.replace("_", " ").replaceFirstChar { it.uppercase() }}"
                     }
                     Text(loadingText, color = Color.LightGray)
                 }

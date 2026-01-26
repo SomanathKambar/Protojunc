@@ -24,15 +24,14 @@ kotlin {
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.okio)
             implementation(libs.kermit)
-            implementation("io.ktor:ktor-client-core:2.3.12")
-            implementation("io.ktor:ktor-client-websockets:2.3.12")
-            implementation("io.ktor:ktor-client-cio:2.3.12")
-            implementation("io.ktor:ktor-client-logging:2.3.12")
-            implementation("io.ktor:ktor-client-content-negotiation:2.3.12")
-            implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.12")
-            
-            implementation(libs.koin.core)
-            implementation(libs.webrtc)
+    implementation(libs.ktor.client.core)
+    implementation(libs.ktor.client.websockets)
+    implementation(libs.ktor.client.cio)
+    // implementation(libs.ktor.client.logging) // Check if this exists in catalog or add it
+    implementation(libs.ktor.client.content.negotiation)
+    implementation(libs.ktor.serialization.kotlinx.json)
+
+    implementation(libs.webrtc)
             implementation(libs.kable)
         }
         
@@ -46,6 +45,9 @@ kotlin {
             implementation("org.igniterealtime.smack:smack-im:4.4.8") {
                 exclude(group = "xpp3", module = "xpp3")
             }
+
+            implementation(libs.koin.android)
+            implementation("io.ktor:ktor-client-logging:3.3.3")
         }
     }
 }
@@ -55,5 +57,9 @@ android {
     compileSdk = libs.versions.android.compileSdk.get().toInt()
     defaultConfig {
         minSdk = 24
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 }

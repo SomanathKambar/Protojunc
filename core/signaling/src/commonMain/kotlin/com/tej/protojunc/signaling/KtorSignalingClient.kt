@@ -12,6 +12,7 @@ import co.touchlab.kermit.Logger
 
 import io.ktor.client.plugins.logging.*
 import com.tej.protojunc.signaling.util.SignalingEncoder
+import com.tej.protojunc.core.models.SignalingMessage as ModelSignalingMessage
 
 class KtorSignalingClient(
     private val host: String,
@@ -38,7 +39,7 @@ class KtorSignalingClient(
     private val _state = MutableStateFlow(SignalingState.IDLE)
     override val state = _state.asStateFlow()
 
-    private val _messages = MutableSharedFlow<SignalingMessage>(replay = 5, extraBufferCapacity = 10)
+    private val _messages = MutableSharedFlow<ModelSignalingMessage>(replay = 5, extraBufferCapacity = 10)
     override val messages = _messages.asSharedFlow()
 
     override suspend fun connect() {
@@ -99,7 +100,7 @@ class KtorSignalingClient(
         }
     }
 
-    override suspend fun sendMessage(message: SignalingMessage) {
+    override suspend fun sendMessage(message: ModelSignalingMessage) {
         try {
             val text = SignalingEncoder.encode(message)
             session?.send(Frame.Text(text)) ?: co.touchlab.kermit.Logger.w { "Cannot send message, no active session" }

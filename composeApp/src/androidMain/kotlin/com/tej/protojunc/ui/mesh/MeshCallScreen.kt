@@ -23,7 +23,7 @@ import com.tej.protojunc.ui.theme.RadarDiscoveryUI
 import com.tej.protojunc.ui.ConnectionViewModel
 import com.tej.protojunc.models.NearbyPeer
 import com.tej.protojunc.discovery.PeerDiscovered
-import com.tej.protojunc.signaling.SignalingMessage
+import com.tej.protojunc.core.models.SignalingMessage
 import androidx.compose.foundation.shape.RoundedCornerShape
 import kotlinx.coroutines.launch
 

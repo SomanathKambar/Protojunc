@@ -1,7 +1,7 @@
 package com.tej.protojunc.p2p.core.orchestrator
 
 import com.tej.protojunc.webrtc.WebRtcSessionManager
-import com.tej.protojunc.signaling.SignalingMessage
+import com.tej.protojunc.core.models.SignalingMessage
 import com.tej.protojunc.signaling.SignalingClient
 import com.tej.protojunc.discovery.DiscoveryManager
 import com.tej.protojunc.models.IceCandidateModel
@@ -132,7 +132,7 @@ class MeshCoordinator(
     }
 
     private suspend fun handlePeerMessage(message: SignalingMessage) {
-        val peerId = message.senderId
+        val peerId = message.senderId ?: return
         
         if (message.type == SignalingMessage.Type.MESSAGE) {
             _chatMessages.update { it + ChatMessage(peerId, message.payload ?: "", com.tej.protojunc.getCurrentTimeMillis()) }

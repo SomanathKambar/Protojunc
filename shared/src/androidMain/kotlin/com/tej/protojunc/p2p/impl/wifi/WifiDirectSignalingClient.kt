@@ -1,6 +1,8 @@
 package com.tej.protojunc.p2p.impl.wifi
 
-import com.tej.protojunc.signaling.*
+import com.tej.protojunc.signaling.SignalingClient
+import com.tej.protojunc.core.models.SignalingMessage
+import com.tej.protojunc.signaling.SignalingState
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.serialization.json.Json
@@ -63,7 +65,7 @@ class WifiDirectSignalingClient(
     override suspend fun sendMessage(message: SignalingMessage) {
         withContext(Dispatchers.IO) {
             try {
-                val text = Json.encodeToString(message) + "\n"
+                val text = Json.encodeToString(SignalingMessage.serializer(), message) + "\n"
                 socket?.outputStream?.write(text.toByteArray())
                 socket?.outputStream?.flush()
             } catch (e: Exception) {

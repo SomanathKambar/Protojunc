@@ -7,7 +7,6 @@ import io.ktor.server.testing.*
 import kotlin.test.*
 
 class ApplicationTest {
-
     @Test
     fun testRoot() = testApplication {
         application {
@@ -15,6 +14,6 @@ class ApplicationTest {
         }
         val response = client.get("/")
         assertEquals(HttpStatusCode.OK, response.status)
-        assertEquals("Ktor: ${Greeting().greet()}", response.bodyAsText())
+        assertTrue(response.bodyAsText().contains("Protojunc Signaling Server is Running"))
     }
 }

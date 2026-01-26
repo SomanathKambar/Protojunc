@@ -6,7 +6,7 @@ plugins {
     alias(libs.plugins.kotlinSerialization)
     alias(libs.plugins.kotlinCocoapods)
     alias(libs.plugins.protobuf)
-    // alias(libs.plugins.ksp)
+    alias(libs.plugins.ksp)
 }
 
 kotlin {
@@ -53,15 +53,17 @@ kotlin {
             implementation(libs.room.runtime)
             implementation(libs.androidx.datastore.preferences)
             implementation(libs.androidx.sqlite)
-            implementation("io.ktor:ktor-client-core:2.3.12")
-            implementation("io.ktor:ktor-client-websockets:2.3.12")
-            implementation("io.ktor:ktor-client-cio:2.3.12")
-            implementation("io.ktor:ktor-client-content-negotiation:2.3.12")
-            implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.12")
+            implementation(libs.ktor.client.core)
+            implementation(libs.ktor.client.websockets)
+            implementation(libs.ktor.client.cio)
+            implementation(libs.ktor.client.content.negotiation)
+            implementation(libs.ktor.serialization.kotlinx.json)
             implementation(libs.androidx.lifecycle.viewmodelCompose)
             implementation(libs.koin.core)
+            implementation("androidx.sqlite:sqlite-bundled:2.6.2")
         }
         androidMain.dependencies {
+            implementation(libs.koin.android)
             implementation(libs.webrtc.kmp.android)
             implementation(libs.androidx.core.ktx)
             implementation(libs.zxing.core)
@@ -73,11 +75,10 @@ kotlin {
 }
 
 dependencies {
-    // add("kspCommonMainMetadata", libs.room.compiler)
-    // add("kspAndroid", libs.room.compiler)
-    // add("kspIosX64", libs.room.compiler)
-    // add("kspIosArm64", libs.room.compiler)
-    // add("kspIosSimulatorArm64", libs.room.compiler)
+    add("kspAndroid", libs.room.compiler)
+    add("kspIosArm64", libs.room.compiler)
+    add("kspIosSimulatorArm64", libs.room.compiler)
+    add("kspIosX64", libs.room.compiler)
 }
 
 android {

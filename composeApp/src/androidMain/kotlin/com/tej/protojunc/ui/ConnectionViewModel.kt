@@ -8,7 +8,7 @@ import com.tej.protojunc.webrtc.WebRtcState
 import com.tej.protojunc.discovery.PeerDiscovered
 import com.shepeliev.webrtckmp.SessionDescriptionType
 import com.tej.protojunc.signaling.util.SdpMinifier
-import com.tej.protojunc.signaling.SignalingMessage
+import com.tej.protojunc.core.models.SignalingMessage as ServerSignalingMessage
 import com.tej.protojunc.webrtc.HandshakeStage
 import com.tej.protojunc.discovery.DiscoveryManager
 import co.touchlab.kermit.Logger
@@ -40,7 +40,6 @@ import com.tej.protojunc.vault.AndroidFileTransferManager
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import com.tej.protojunc.core.signaling.webrtc.SignalingManager
-import com.tej.protojunc.core.models.SignalingMessage as ServerSignalingMessage
 import com.tej.protojunc.models.IceCandidateModel
 
 class ConnectionViewModel(application: Application) : AndroidViewModel(application), KoinComponent {
@@ -92,8 +91,8 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
                     sessionManager.iceCandidates.collect { candidate ->
                         signalingManager.send(
                             ServerSignalingMessage(
-                                type = "candidate",
-                                candidate = candidate.sdp,
+                                type = ServerSignalingMessage.Type.ICE_CANDIDATE,
+                                iceCandidate = candidate.sdp,
                                 sdpMid = candidate.sdpMid,
                                 sdpMLineIndex = candidate.sdpMLineIndex
                             )
@@ -109,32 +108,35 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
     private suspend fun handleSignalingMessage(message: ServerSignalingMessage) {
         try {
             when (message.type) {
-                "offer" -> {
+                ServerSignalingMessage.Type.OFFER -> {
                     Logger.i { "Received Remote Offer via Server" }
                     sessionManager.createPeerConnection()
                     sessionManager.handleRemoteDescription(message.sdp!!, SessionDescriptionType.Offer)
                     val answer = sessionManager.createAnswer()
                     if (answer != null) {
-                        signalingManager.send(ServerSignalingMessage(type = "answer", sdp = answer))
+                        signalingManager.send(ServerSignalingMessage(type = ServerSignalingMessage.Type.ANSWER, sdp = answer))
                     }
                     _handshakeStage.value = HandshakeStage.COMPLETED
                 }
-                "answer" -> {
+                ServerSignalingMessage.Type.ANSWER -> {
                     Logger.i { "Received Remote Answer via Server" }
                     sessionManager.handleRemoteDescription(message.sdp!!, SessionDescriptionType.Answer)
                     _handshakeStage.value = HandshakeStage.COMPLETED
                 }
-                "candidate" -> {
-                    if (message.candidate != null && message.sdpMLineIndex != null) {
+                ServerSignalingMessage.Type.ICE_CANDIDATE -> {
+                    if (message.iceCandidate != null && message.sdpMLineIndex != null) {
                         Logger.d { "Received Remote ICE Candidate via Server" }
                         sessionManager.addIceCandidate(
                             IceCandidateModel(
-                                sdp = message.candidate!!,
+                                sdp = message.iceCandidate!!,
                                 sdpMid = message.sdpMid,
                                 sdpMLineIndex = message.sdpMLineIndex!!
                             )
                         )
                     }
+                }
+                else -> {
+                    Logger.d { "Unhandled signaling message type: ${message.type}" }
                 }
             }
         } catch (e: Exception) {
@@ -153,7 +155,7 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
                 sessionManager.createPeerConnection()
                 val offer = sessionManager.createOffer()
                 if (offer != null) {
-                    signalingManager.send(ServerSignalingMessage(type = "offer", sdp = offer))
+                    signalingManager.send(ServerSignalingMessage(type = ServerSignalingMessage.Type.OFFER, sdp = offer))
                     _handshakeStage.value = HandshakeStage.EXCHANGING_SDP_OFFER
                 }
             } catch (e: Exception) {
@@ -303,7 +305,7 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
                 if (answer == null) throw IllegalStateException("Local Answer generation failed")
                 
                 val identity = _userIdentity.value ?: throw IllegalStateException("Identity not loaded")
-                val encodedAnswer = SdpMinifier.encodePayload(answer, SignalingMessage.Type.ANSWER, identity.deviceId)
+                val encodedAnswer = SdpMinifier.encodePayload(answer, ServerSignalingMessage.Type.ANSWER, identity.deviceId)
                 _localSdp.value = encodedAnswer
 
                 discoveryManager.writeToPeer(peer, encodedAnswer)
@@ -347,7 +349,7 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
                 if (offer == null) throw IllegalStateException("Offer generation failed")
                 
                 val identity = _userIdentity.value ?: throw IllegalStateException("Identity not loaded")
-                _localSdp.value = offer.let { SdpMinifier.encodePayload(it, SignalingMessage.Type.OFFER, identity.deviceId) }
+                _localSdp.value = offer.let { SdpMinifier.encodePayload(it, ServerSignalingMessage.Type.OFFER, identity.deviceId) }
                 _isInitializing.value = false
                 _isProcessing.value = false
                 if (_localSdp.value != null) onReady()
@@ -380,7 +382,7 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
                 if (answer == null) throw IllegalStateException("Answer generation failed")
                 
                 val identity = _userIdentity.value ?: throw IllegalStateException("Identity not loaded")
-                _localSdp.value = SdpMinifier.encodePayload(answer, SignalingMessage.Type.ANSWER, identity.deviceId)
+                _localSdp.value = SdpMinifier.encodePayload(answer, ServerSignalingMessage.Type.ANSWER, identity.deviceId)
                 _isInitializing.value = false
             } catch (e: Exception) {
                 Logger.e(e) { "Offer Processing Failure" }

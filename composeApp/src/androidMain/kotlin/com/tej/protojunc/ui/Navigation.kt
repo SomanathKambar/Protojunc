@@ -12,5 +12,6 @@ enum class Screen {
     WifiDirectCall,
     VideoCall,
     FileVault,
-    MeshCall
+    MeshCall,
+    Dashboard
 }

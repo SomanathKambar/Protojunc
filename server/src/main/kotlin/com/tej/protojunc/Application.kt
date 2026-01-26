@@ -2,10 +2,12 @@ package com.tej.protojunc
 
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
+import io.ktor.server.request.receiveText
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
+import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import io.ktor.server.websocket.DefaultWebSocketServerSession
@@ -16,6 +18,8 @@ import io.ktor.server.websocket.webSocket
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readText
 import io.ktor.websocket.send
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.net.InetAddress
 import java.text.SimpleDateFormat
 import java.util.Collections
@@ -68,6 +72,40 @@ fun logEvent(msg: String) {
 fun Application.module() {
     install(io.ktor.server.plugins.calllogging.CallLogging)
     
+    // Background broadcaster for Clinical Dashboard (Phase 1)
+    launch {
+        val statuses = listOf(
+            "Patient in Room 4: Incision Started",
+            "Room 2: Vitals Stable",
+            "Surgical Suite A: Preparation Complete",
+            "Patient in Room 4: Suturing",
+            "Emergency: Room 7 requires assistance",
+            "Dr. Smith: Entering Room 4",
+            "Patient 88: Anesthesia Administered"
+        )
+        while (true) {
+            kotlinx.coroutines.delay(8000)
+            val msg = statuses.random()
+            val roomPeers = rooms["dashboard"]
+            if (!roomPeers.isNullOrEmpty()) {
+                val signalingMessage = SignalingMessage(
+                    type = SignalingMessage.Type.MESSAGE,
+                    sdp = "Surgical Update: $msg",
+                    senderId = "SERVER"
+                )
+                val jsonText = Json.encodeToString(SignalingMessage.serializer(), signalingMessage)
+                logEvent("Broadcasting Surgical Status: $msg")
+                roomPeers.forEach { peer ->
+                    try {
+                        peer.session.send(jsonText)
+                    } catch (e: Exception) {
+                        // Cleanup happens in the websocket thread
+                    }
+                }
+            }
+        }
+    }
+
     install(io.ktor.server.plugins.statuspages.StatusPages) {
         exception<Throwable> { call, cause ->
             logEvent("CRITICAL SERVER ERROR: ${cause.localizedMessage}")
@@ -88,6 +126,14 @@ fun Application.module() {
     routing {
         get("/") {
             call.respondText("Protojunc Signaling Server is Running!\nActive Rooms: ${rooms.size}\nTotal Peers: ${rooms.values.sumOf { it.size }}")
+        }
+
+        route("/api") {
+            post("/reports") {
+                val body = call.receiveText()
+                logEvent("Received Surgical Report: $body")
+                call.respondText("Report Received", status = io.ktor.http.HttpStatusCode.Created)
+            }
         }
 
         get("/dashboard") {

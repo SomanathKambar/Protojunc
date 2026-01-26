@@ -52,6 +52,7 @@ import com.tej.protojunc.p2p.core.orchestrator.MeshCoordinator
 import com.tej.protojunc.p2p.core.orchestrator.LinkOrchestrator
 import com.tej.protojunc.p2p.core.orchestrator.TransportPriority
 import com.tej.protojunc.ui.theme.ProtojuncTheme
+import com.tej.protojunc.ui.dashboard.DashboardScreen
 import com.juul.kable.peripheral
 
 @Composable
@@ -224,6 +225,7 @@ fun App() {
                         HomeScreen(
                             nearbyPeers = nearbyPeers,
                             onVaultClick = { navController.navigate(Screen.FileVault.name) },
+                            onDashboardClick = { navController.navigate(Screen.Dashboard.name) },
                             onModeSelected = { type, isHost ->
                                 if (!isNavigating) {
                                     val isBluetoothRequired = type == ConnectionType.BLE || 
@@ -493,6 +495,14 @@ fun App() {
                                  navController.popBackStack() 
                              }
                          )
+                    }
+
+                    composable(Screen.Dashboard.name) {
+                        DashboardScreen(
+                            serverHost = com.tej.protojunc.signalingServerHost,
+                            serverPort = com.tej.protojunc.signalingServerPort,
+                            onBack = { navController.popBackStack() }
+                        )
                     }
                 }
 

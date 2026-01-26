@@ -1,7 +1,9 @@
 package com.tej.protojunc.p2p.core.orchestrator
 
 import com.tej.protojunc.webrtc.WebRtcSessionManager
-import com.tej.protojunc.signaling.*
+import com.tej.protojunc.signaling.SignalingClient
+import com.tej.protojunc.signaling.SignalingState
+import com.tej.protojunc.core.models.SignalingMessage
 import com.tej.protojunc.models.IceCandidateModel
 import com.shepeliev.webrtckmp.SessionDescriptionType
 import kotlinx.coroutines.*
@@ -88,18 +90,20 @@ class CallSessionOrchestrator(
                 SignalingMessage.Type.JOIN -> {
                     Logger.i { "Peer joined room. Current state: ${_signalingState.value}, Role: ${if (isHostRole) "Host" else "Joiner"}" }
                     if (isHostRole) {
-                        if (webRtcManager.connectionState.value == com.tej.protojunc.webrtc.WebRtcState.Ready || 
-                            webRtcManager.connectionState.value == com.tej.protojunc.webrtc.WebRtcState.Idle) {
+                        // Host only starts if not already connected/connecting
+                        val currentState = webRtcManager.connectionState.value
+                        if (currentState == com.tej.protojunc.webrtc.WebRtcState.Ready || 
+                            currentState == com.tej.protojunc.webrtc.WebRtcState.Idle) {
                             Logger.i { "Host starting handshake with new peer..." }
                             scope.launch {
+                                // Small delay to ensure joiner is ready to receive
+                                delay(500)
                                 activeSignalingClient?.sendMessage(SignalingMessage(type = currentMode, senderId = localId))
                                 startCallInternal()
                             }
-                        } else {
-                            Logger.d { "Host already in call or connecting, ignoring redundant JOIN" }
                         }
                     } else {
-                        Logger.i { "Joiner sees new peer, re-announcing presence..." }
+                        // Joiner re-announces to make sure host sees them
                         scope.launch {
                             activeSignalingClient?.sendMessage(SignalingMessage(type = SignalingMessage.Type.JOIN, senderId = localId))
                         }

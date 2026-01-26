@@ -1,8 +1,9 @@
 package com.tej.protojunc.bluetooth
 
-import com.tej.protojunc.signaling.SignalingClient
-import com.tej.protojunc.signaling.SignalingMessage
+import com.tej.protojunc.p2p.core.orchestrator.TransportPriority
+import com.tej.protojunc.core.models.SignalingMessage
 import com.tej.protojunc.signaling.SignalingState
+import com.tej.protojunc.signaling.SignalingClient
 import com.tej.protojunc.signaling.mesh.MeshPacket
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
