@@ -1,72 +1,85 @@
-# Protojunc: Running the Ecosystem
+# 📱 Protojunc: Simple User & Technical Guide
 
-This guide explains how to run the **Protojunc Signaling Server** and the **Android Client** to test WebRTC communication.
+Welcome to **Protojunc**! This guide explains what this app does, how it works behind the scenes, and how you can get it running. We have designed this to be easy to understand even if you aren't a "tech expert."
 
-## System Overview
-The ecosystem consists of:
-1.  **Signaling Server:** A centralized Ktor server (`:server`) that brokers connections.
-2.  **Clients:** Android devices (`:feature:vault`) running the "Protojunc" app.
+---
 
-**You only need to run ONE server instance.** All clients connect to this single instance.
+## 🌟 1. What is Protojunc?
+Protojunc is a "Universal Communication" app. Think of it like a smart walkie-talkie that can send video, voice, and text. 
 
-## 1. Running the Signaling Server
+**The Special Part:** It works even if you don't have internet! It can talk to other phones nearby using Bluetooth or local Wi-Fi, or it can talk across the world using a central server.
 
-The server acts as the hub for exchanging SDP offers/answers and ICE candidates between peers.
+### Key Features:
+*   **Video & Voice Calls:** High-quality P2P (Phone-to-Phone) calls.
+*   **Offline Mode:** Connect via Bluetooth when there is no cell service.
+*   **Smart Handover:** If you walk out of Bluetooth range, it can automatically try to switch to the Internet to keep the call alive.
+*   **Clinical Dashboard:** A special "Live View" for teams to see status updates in real-time.
 
-### Prerequisites
-- JDK 17+ installed.
-- Port `8080` must be free.
+---
 
-### Steps
-1. Open a terminal in the project root.
-2. Run the server using Gradle:
-   ```bash
-   ./gradlew :server:run
-   ```
-3. Wait for the log message:
-   ```
-   [SERVER] Starting Protojunc Signaling Server on port 8080...
-   [SERVER] [mDNS] Discovery active: _protojunc._tcp.local.
-   ```
-4. **Verify:** Open your browser and go to `http://localhost:8080/dashboard`. You should see the "Protojunc Signaling Status" dashboard.
+## 🏗 2. How it Works (The Simple Version)
 
-## 2. Running the Android Client
+To make a call, the app uses two main parts:
 
-The Android app will connect to the signaling server to establish a P2P connection.
+### A. The "Switchboard Operator" (The Server)
+Imagine two people in a dark room trying to find each other to shake hands. They can't see each other, so they call out to a "Friend" (the Server) standing in the hallway. 
+1.  **Phone A** tells the Server: "I am here, tell Phone B to find me."
+2.  **The Server** tells **Phone B**: "Phone A is ready, here is how to reach them."
+3.  Once they "shake hands," the Server steps away. The two phones now talk **directly** to each other. This makes the call fast and private.
 
-### Configuration
-By default, the client is configured to connect to `ws://10.0.2.2:8080/signaling/default?device=Android`.
-- **Emulator:** `10.0.2.2` maps to the host machine's `localhost`. It works out-of-the-box if the server is running on the same machine.
-- **Physical Device:** You **must** change the `signalingUrl` in `SignalingManager.kt` to your computer's local IP address (e.g., `ws://192.168.1.105:8080...`).
-    - **Note:** Ensure both the mobile device and the computer are on the **same Wi-Fi network**.
-    - **Note:** Ensure your computer's firewall allows incoming connections on port `8080`.
+### B. The "Handshake" (SDP & ICE)
+*   **SDP (The Business Card):** When you start a call, your phone creates a "Business Card" (called an SDP). It contains technical details about what kind of video your phone supports.
+*   **ICE (The Map):** Your phone also looks for all possible ways to be reached (Wi-Fi, Data, etc.) and sends these "Map Pins" (ICE Candidates) to the other phone.
 
-### Steps
-1. Connect your Android device or start an Emulator.
-2. Run the app:
-   ```bash
-   ./gradlew :feature:vault:installDebug
-   ```
-   Or launch "feature.vault" from Android Studio.
-3. Open the app. It will attempt to connect to the server automatically.
-4. **Verify:** Check the Server Dashboard (`http://localhost:8080/dashboard`). You should see a new peer appear in the "Active Trunks" section.
+---
 
-## 3. Testing P2P (Simulated)
+## 🚀 3. How to Start & Run
 
-To test a full call, you need **two devices** connecting to the same room code.
-1. Run the app on **Device A** (Emulator).
-2. Run the app on **Device B** (Another Emulator or Physical Device).
-3. Both devices should appear in the Server Dashboard under the same Room (default: `default`).
-4. When implemented, one device initiating a call will trigger an `offer` -> `answer` -> `candidate` exchange, visible in the server logs.
+### Step 1: Start the Signaling Server
+The server must be running first so the phones can find each other.
+1.  Open a terminal on your computer.
+2.  Navigate to the project folder.
+3.  Run the command:  
+    `./gradlew :server:run`
+4.  The server is now live! You can see who is connected by opening `http://localhost:8080/dashboard` in your browser.
 
-## Troubleshooting
+### Step 2: Start the Android App
+1.  Open the project in **Android Studio**.
+2.  Connect two Android phones to your computer.
+3.  Click **Run** to install the app on both phones.
+4.  **Important:** Make sure both phones are on the same Wi-Fi network as your computer.
 
-- **Server won't start:**
-    - Check if port 8080 is used: `lsof -i :8080`.
-    - Kill the process or change the port in `Application.kt`.
-- **App can't connect:**
-    - **Emulator:** Check internet access. Verify `10.0.2.2` is reachable.
-    - **Physical Device:** Double-check IP address in `SignalingManager.kt` and firewall settings.
-- **Build fails:**
-    - Run `./gradlew clean` and try again.
-    - Ensure you are using JDK 17.
+### Step 3: Connect Devices
+1.  On **Phone A**, tap "Online Call" and select **"Start Call" (Host)**.
+2.  On **Phone B**, tap "Online Call" and select **"Join Call"**.
+3.  The phones will "handshake" via the server and the video will start!
+
+---
+
+## 🛠 4. Connection Modes Explained
+
+| Mode | Best For... | How it Works |
+| :--- | :--- | :--- |
+| **Online Call** | Long distance | Uses the internet/server to find the peer. |
+| **BLE / Bluetooth** | No Internet (Offline) | Uses Bluetooth to find and talk to nearby phones. |
+| **QR Code** | Maximum Security | You scan a code on the other person's screen to connect manually. |
+| **XMPP** | Office/Enterprise | Uses professional chat servers (like old-school office messengers). |
+
+---
+
+## 👨‍💻 5. Under the Hood (For Techies)
+
+*   **Signaling:** We use **Ktor WebSockets**. This is a permanent open pipe between the phone and the server used *only* for the handshake.
+*   **Media:** We use **WebRTC-KMP**. This handles the heavy lifting of encoding video and sending it over the network.
+*   **Data Size:** We use an **SDP Minifier**. Standard "Business Cards" (SDPs) are huge. We shrink them down to tiny codes so they can even fit inside a single QR code or a small Bluetooth message.
+*   **XMPP/Smack:** For enterprise modes, we use the **Smack library** on Android to handle professional messaging protocols.
+
+---
+
+## ❓ Troubleshooting
+*   **"Can't see the other device":** Check that the **Server IP** in the app settings matches your computer's IP address.
+*   **"Handshake Failed":** Ensure both devices have **Camera and Microphone permissions** turned on.
+*   **"Echo/Self-View Only":** This usually happens if the "Room Code" is the same for two different groups. Use a unique Room Code!
+
+---
+*Created for the Protojunc Project - 2026*
