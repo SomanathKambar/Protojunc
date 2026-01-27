@@ -39,17 +39,20 @@ class KtorSignalingClient(
     private val _state = MutableStateFlow(SignalingState.IDLE)
     override val state = _state.asStateFlow()
 
-    private val _messages = MutableSharedFlow<ModelSignalingMessage>(replay = 5, extraBufferCapacity = 10)
+    private val _messages = MutableSharedFlow<ModelSignalingMessage>(replay = 0, extraBufferCapacity = 64)
     override val messages = _messages.asSharedFlow()
+
+    private var isActive = false
 
     override suspend fun connect() {
         if (_state.value == SignalingState.CONNECTED) return
+        isActive = true
         
         val protocol = if (useSsl) "wss" else "ws"
         val sanitizedRoom = if (roomCode.isBlank()) "default" else roomCode
         var retryDelay = 1000L
         
-        while (currentCoroutineContext().isActive) {
+        while (currentCoroutineContext().isActive && isActive) {
             _state.value = SignalingState.CONNECTING
             val path = "/signaling/$sanitizedRoom"
             
@@ -110,7 +113,8 @@ class KtorSignalingClient(
     }
 
     override suspend fun disconnect() {
-        _state.value = SignalingState.IDLE // Set to IDLE to stop retry loop via isActive check
+        isActive = false
+        _state.value = SignalingState.IDLE 
         session?.close()
         session = null
     }

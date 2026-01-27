@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.*
 import co.touchlab.kermit.Logger
 import com.tej.protojunc.webrtc.HandshakeStage
 
+import com.tej.protojunc.signaling.util.SdpMinifier
 import com.tej.protojunc.signaling.util.CryptoManager
 import com.tej.protojunc.signaling.util.SimpleCryptoManager
 
@@ -85,6 +86,11 @@ class CallSessionOrchestrator(
     }
 
     private suspend fun handleSignalingMessage(message: SignalingMessage) {
+        if (message.senderId == localId) {
+            Logger.d { "Ignoring signaling message from self: ${message.type}" }
+            return
+        }
+        
         try {
             when (message.type) {
                 SignalingMessage.Type.JOIN -> {
@@ -126,12 +132,13 @@ class CallSessionOrchestrator(
                     if (webRtcManager.connectionState.value == com.tej.protojunc.webrtc.WebRtcState.Idle) {
                          webRtcManager.createPeerConnection(videoEnabled = currentMode == SignalingMessage.Type.VIDEO_CALL)
                     }
-                    webRtcManager.handleRemoteDescription(message.sdp!!, SessionDescriptionType.Offer)
+                    val expandedSdp = SdpMinifier.expand(message.sdp!!)
+                    webRtcManager.handleRemoteDescription(expandedSdp, SessionDescriptionType.Offer)
                     onHandshakeStageChanged(HandshakeStage.EXCHANGING_SDP_ANSWER)
                     val answer = webRtcManager.createAnswer()
                     activeSignalingClient?.sendMessage(SignalingMessage(
                         type = SignalingMessage.Type.ANSWER,
-                        sdp = answer,
+                        sdp = answer?.let { SdpMinifier.minify(it) } ?: answer,
                         senderId = localId
                     ))
                     onHandshakeStageChanged(HandshakeStage.GATHERING_ICE_CANDIDATES)
@@ -139,7 +146,8 @@ class CallSessionOrchestrator(
                 SignalingMessage.Type.ANSWER -> {
                     Logger.i { "Received Answer, setting remote description..." }
                     onHandshakeStageChanged(HandshakeStage.EXCHANGING_SDP_ANSWER)
-                    webRtcManager.handleRemoteDescription(message.sdp!!, SessionDescriptionType.Answer)
+                    val expandedSdp = SdpMinifier.expand(message.sdp!!)
+                    webRtcManager.handleRemoteDescription(expandedSdp, SessionDescriptionType.Answer)
                     onHandshakeStageChanged(HandshakeStage.WAITING_FOR_REMOTE_VIDEO)
                 }
                 SignalingMessage.Type.ICE_CANDIDATE -> {
@@ -219,7 +227,7 @@ class CallSessionOrchestrator(
         val offer = webRtcManager.createOffer()
         activeSignalingClient?.sendMessage(SignalingMessage(
             type = SignalingMessage.Type.OFFER,
-            sdp = offer,
+            sdp = offer?.let { SdpMinifier.minify(it) } ?: offer,
             senderId = localId
         ))
         onHandshakeStageChanged(HandshakeStage.GATHERING_ICE_CANDIDATES)
@@ -274,7 +282,7 @@ class CallSessionOrchestrator(
             val offer = webRtcManager.createOffer()
             val msg = SignalingMessage(
                 type = SignalingMessage.Type.OFFER,
-                sdp = offer,
+                sdp = offer?.let { SdpMinifier.minify(it) } ?: offer,
                 senderId = localId
             )
             

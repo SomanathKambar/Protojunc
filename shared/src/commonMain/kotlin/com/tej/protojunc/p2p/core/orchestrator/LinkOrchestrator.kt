@@ -25,6 +25,7 @@ class LinkOrchestrator(
     private val onTransportChanged: (TransportPriority, Int) -> Unit = { _, _ -> }
 ) : com.tej.protojunc.signaling.SignalingClient {
     private val _activeTransports = MutableStateFlow<List<TransportCandidate>>(emptyList())
+    private val transportJobs = mutableMapOf<SignalingClient, Job>()
     
     private val _bestTransport = MutableStateFlow<TransportCandidate?>(null)
     val bestTransport = _bestTransport.asStateFlow()
@@ -37,15 +38,34 @@ class LinkOrchestrator(
 
     override suspend fun connect() {
         // In LinkOrchestrator, connect means connect all candidate transports
-        _activeTransports.value.forEach { 
-            scope.launch { it.client.connect() }
+        _activeTransports.value.forEach { candidate ->
+            if (transportJobs[candidate.client]?.isActive != true) {
+                transportJobs[candidate.client] = scope.launch { 
+                    candidate.client.connect() 
+                }
+            }
         }
     }
 
     override suspend fun disconnect() {
+        val transports = _activeTransports.value
+        transports.forEach { 
+            transportJobs[it.client]?.cancel()
+            it.client.disconnect()
+        }
+        transportJobs.clear()
+    }
+
+    fun clearTransports() {
+        Logger.d { "Clearing all transports from LinkOrchestrator" }
         _activeTransports.value.forEach { 
+            transportJobs[it.client]?.cancel()
             scope.launch { it.client.disconnect() }
         }
+        _activeTransports.value = emptyList()
+        transportJobs.clear()
+        _bestTransport.value = null
+        _state.value = SignalingState.IDLE
     }
 
     fun addTransport(priority: TransportPriority, client: SignalingClient) {

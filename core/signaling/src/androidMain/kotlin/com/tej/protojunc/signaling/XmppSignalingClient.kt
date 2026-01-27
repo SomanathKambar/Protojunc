@@ -11,23 +11,26 @@ import org.jxmpp.jid.impl.JidCreate
 import com.tej.protojunc.signaling.util.SignalingEncoder
 import com.tej.protojunc.core.models.SignalingMessage
 
-class AndroidXmppSignalingClient(
+actual class XmppSignalingClient actual constructor(
     private val jid: String,
-    private val password: String = "password",
-    private val host: String = "10.0.2.2", // Default to localhost for emulator
-    private val domain: String = "example.com"
+    private val password: String,
+    private val host: String,
+    private val domain: String
 ) : SignalingClient {
 
     private val _state = MutableStateFlow(SignalingState.IDLE)
-    override val state = _state.asStateFlow()
+    override actual val state: StateFlow<SignalingState> = _state.asStateFlow()
 
-    private val _messages = MutableSharedFlow<SignalingMessage>()
-    override val messages = _messages.asSharedFlow()
+    private val _messages = MutableSharedFlow<SignalingMessage>(extraBufferCapacity = 64)
+    override actual val messages: Flow<SignalingMessage> = _messages.asSharedFlow()
 
     private var connection: AbstractXMPPConnection? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    
+    // Track the last peer we received a message from so we can reply
+    private var lastRemoteJid: org.jxmpp.jid.Jid? = null
 
-    override suspend fun connect() {
+    override actual suspend fun connect() {
         if (_state.value == SignalingState.CONNECTED) return
         _state.value = SignalingState.CONNECTING
 
@@ -39,6 +42,7 @@ class AndroidXmppSignalingClient(
                     .setPort(5222)
                     .setUsernameAndPassword(jid.split("@")[0], password)
                     .setSecurityMode(org.jivesoftware.smack.ConnectionConfiguration.SecurityMode.disabled)
+                    .setSendPresence(true)
                     .build()
 
                 val conn = XMPPTCPConnection(config)
@@ -50,6 +54,7 @@ class AndroidXmppSignalingClient(
                 chatManager.addIncomingListener { from, message, chat ->
                     val body = message.body
                     if (body != null) {
+                        lastRemoteJid = from.asBareJid()
                         scope.launch {
                             try {
                                 val signalingMsg = SignalingEncoder.decode(body)
@@ -71,25 +76,30 @@ class AndroidXmppSignalingClient(
         }
     }
 
-    override suspend fun sendMessage(message: SignalingMessage) {
+    override actual suspend fun sendMessage(message: SignalingMessage) {
         val conn = connection ?: return
         if (!conn.isAuthenticated) return
 
         withContext(Dispatchers.IO) {
             try {
                 val chatManager = ChatManager.getInstanceFor(conn)
-                val targetJid = JidCreate.from("admin@$domain") 
-                val chat = chatManager.chatWith(targetJid.asEntityBareJidIfPossible())
                 
+                // If we don't have a lastRemoteJid, we try to derive it from senderId if it looks like a JID
+                // or we use a fallback if absolutely necessary.
+                // In P2P signaling, the first message is usually JOIN which sets lastRemoteJid.
+                val target = lastRemoteJid ?: JidCreate.from("admin@$domain") 
+                
+                val chat = chatManager.chatWith(target.asEntityBareJidIfPossible())
                 val text = SignalingEncoder.encode(message)
                 chat.send(text)
+                Logger.d { "XMPP Sent ${message.type} to $target" }
             } catch (e: Exception) {
                 Logger.e(e) { "Failed to send XMPP message" }
             }
         }
     }
 
-    override suspend fun disconnect() {
+    override actual suspend fun disconnect() {
         withContext(Dispatchers.IO) {
             connection?.disconnect()
             connection = null

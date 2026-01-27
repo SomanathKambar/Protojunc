@@ -99,7 +99,7 @@ object SdpMinifier {
         return newParts.joinToString(" ")
     }
 
-    private fun expand(minifiedSdp: String): String {
+    fun expand(minifiedSdp: String): String {
         var result = minifiedSdp
         for ((key, value) in TOKENS) {
             result = result.replace(value, key)

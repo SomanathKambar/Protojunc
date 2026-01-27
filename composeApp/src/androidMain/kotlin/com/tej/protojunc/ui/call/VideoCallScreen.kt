@@ -142,6 +142,9 @@ fun VideoCallScreen(
     LaunchedEffect(isHost, connectionType, retryTrigger, selectedXmppMode, userIdentity) {
         if (userIdentity == null) return@LaunchedEffect
         
+        // Clear previous session transports to prevent duplicates/leaks
+        linkOrchestrator.clearTransports()
+
         // 1. Always add Cloud/Online transport if possible
         val serverClient = KtorSignalingClient(
             host = signalingServerHost, 
@@ -156,7 +159,7 @@ fun VideoCallScreen(
             val xmppClient = XmppSignalingClient(jid = "${userIdentity!!.deviceId}@example.com")
             linkOrchestrator.addTransport(TransportPriority.CLOUD, xmppClient) // Treat as cloud for now
         }
-
+        
         // 3. Connect everything
         linkOrchestrator.connect()
         orchestrator.startCall(isHost, mode = selectedXmppMode ?: SignalingMessage.Type.VIDEO_CALL)

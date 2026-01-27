@@ -73,75 +73,10 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
         serverDiscovery.startDiscovery()
         loadIdentity()
         startFileServer()
-        
-        // Start Signaling over WebSocket Server
-        viewModelScope.launch {
-            try {
-                signalingManager.connect()
-                
-                // Listen for incoming signaling
-                launch {
-                    signalingManager.incomingMessages.collect { msg ->
-                        handleSignalingMessage(msg)
-                    }
-                }
-                
-                // Listen for local candidates to send to server
-                launch {
-                    sessionManager.iceCandidates.collect { candidate ->
-                        signalingManager.send(
-                            ServerSignalingMessage(
-                                type = ServerSignalingMessage.Type.ICE_CANDIDATE,
-                                iceCandidate = candidate.sdp,
-                                sdpMid = candidate.sdpMid,
-                                sdpMLineIndex = candidate.sdpMLineIndex
-                            )
-                        )
-                    }
-                }
-            } catch (e: Exception) {
-                Logger.e(e) { "Signaling Server Init Failed" }
-            }
-        }
     }
 
     private suspend fun handleSignalingMessage(message: ServerSignalingMessage) {
-        try {
-            when (message.type) {
-                ServerSignalingMessage.Type.OFFER -> {
-                    Logger.i { "Received Remote Offer via Server" }
-                    sessionManager.createPeerConnection()
-                    sessionManager.handleRemoteDescription(message.sdp!!, SessionDescriptionType.Offer)
-                    val answer = sessionManager.createAnswer()
-                    if (answer != null) {
-                        signalingManager.send(ServerSignalingMessage(type = ServerSignalingMessage.Type.ANSWER, sdp = answer))
-                    }
-                    _handshakeStage.value = HandshakeStage.COMPLETED
-                }
-                ServerSignalingMessage.Type.ANSWER -> {
-                    Logger.i { "Received Remote Answer via Server" }
-                    sessionManager.handleRemoteDescription(message.sdp!!, SessionDescriptionType.Answer)
-                    _handshakeStage.value = HandshakeStage.COMPLETED
-                }
-                ServerSignalingMessage.Type.ICE_CANDIDATE -> {
-                    if (message.iceCandidate != null && message.sdpMLineIndex != null) {
-                        Logger.d { "Received Remote ICE Candidate via Server" }
-                        sessionManager.addIceCandidate(
-                            IceCandidateModel(
-                                sdp = message.iceCandidate!!,
-                                sdpMid = message.sdpMid,
-                                sdpMLineIndex = message.sdpMLineIndex!!
-                            )
-                        )
-                    }
-                }
-                else -> {
-                    Logger.d { "Unhandled signaling message type: ${message.type}" }
-                }
-            }
-        } catch (e: Exception) {
-            Logger.e(e) { "Signaling Handle Error" }
-        }
+        // Handled by CallSessionOrchestrator now
     }
 
     /**
